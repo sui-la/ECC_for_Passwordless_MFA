@@ -1,0 +1,12 @@
+Flask
+Flask-Cors
+Flask-Talisman
+Flask-Limiter
+Flask-SQLAlchemy
+Flask-Mail
+psycopg2-binary
+cryptography
+ecdsa
+PyJWT
+redis 
+# Email sending (uses Python standard library: smtplib, email) 
