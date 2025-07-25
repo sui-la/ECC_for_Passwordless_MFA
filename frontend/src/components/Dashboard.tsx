@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import { sendSecureData } from '../services/api';
+import { importAesKeyFromSharedSecret, aesGcmEncrypt, aesGcmDecrypt } from '../services/crypto';
 
 interface Props {
   jwt: string | null;
@@ -16,6 +18,10 @@ const Dashboard: React.FC<Props> = ({ jwt }) => {
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [secureMessage, setSecureMessage] = useState('');
+  const [secureResponse, setSecureResponse] = useState<string | null>(null);
+  const [secureError, setSecureError] = useState<string | null>(null);
+  const [secureLoading, setSecureLoading] = useState(false);
 
   useEffect(() => {
     if (jwt) {
@@ -51,6 +57,30 @@ const Dashboard: React.FC<Props> = ({ jwt }) => {
 
   const formatDate = (timestamp: number): string => {
     return new Date(timestamp * 1000).toLocaleString();
+  };
+
+  const handleSendSecure = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSecureError(null);
+    setSecureResponse(null);
+    setSecureLoading(true);
+    try {
+      // Get the session shared secret from window
+      const sharedSecret = (window as any).sessionSharedSecret;
+      if (!sharedSecret) throw new Error('No session shared secret found. Please re-authenticate.');
+      const aesKey = await importAesKeyFromSharedSecret(sharedSecret);
+      // Encrypt the message
+      const { ciphertext, iv } = await aesGcmEncrypt(secureMessage, aesKey);
+      // Send full ciphertext (with tag appended) and iv
+      const resp = await sendSecureData(ciphertext, iv);
+      // Decrypt response (full ciphertext with tag appended)
+      const decrypted = await aesGcmDecrypt(resp.ciphertext, resp.iv, aesKey);
+      setSecureResponse(decrypted);
+    } catch (err: any) {
+      setSecureError(err?.message || err || 'Secure data exchange failed');
+    } finally {
+      setSecureLoading(false);
+    }
   };
 
   return (
@@ -150,6 +180,32 @@ const Dashboard: React.FC<Props> = ({ jwt }) => {
         ) : !loading && !error && (
           <div className="alert alert-info" role="alert">
             <span aria-hidden="true">ℹ️</span> No user information available.
+          </div>
+        )}
+        <hr className="dashboard-divider" aria-hidden="true" style={{ margin: '24px 0' }} />
+        <h3 style={{ margin: '10px 0 6px 0', fontWeight: 600 }}>Secure Data Exchange Demo</h3>
+        <form onSubmit={handleSendSecure} style={{ marginBottom: 16 }}>
+          <label htmlFor="secure-message">Message to send securely:</label>
+          <input
+            id="secure-message"
+            type="text"
+            value={secureMessage}
+            onChange={e => setSecureMessage(e.target.value)}
+            disabled={secureLoading}
+            style={{ width: '100%', marginBottom: 8 }}
+          />
+          <button type="submit" disabled={secureLoading || !secureMessage}>
+            {secureLoading ? 'Sending...' : 'Send Securely'}
+          </button>
+        </form>
+        {secureError && (
+          <div className="alert alert-error" role="alert" aria-live="polite">
+            <span aria-hidden="true">⚠️</span> {secureError}
+          </div>
+        )}
+        {secureResponse && (
+          <div className="alert alert-success" role="status" aria-live="polite">
+            <span aria-hidden="true">🔐</span> Response: <strong>{secureResponse}</strong>
           </div>
         )}
       </div>

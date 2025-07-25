@@ -1,6 +1,13 @@
 import React, { useState } from 'react';
 import { getChallenge, verify } from '../services/api';
 import { loadPrivateKey } from '../services/storage';
+import { 
+  generateECDHKeyPair, 
+  exportECDHPublicKey, 
+  importECDHPublicKey, 
+  deriveSharedSecret 
+} from '../services/crypto';
+import { sendECDHPublicKey } from '../services/api';
 
 interface Props {
   onAuth: (jwt: string) => void;
@@ -59,12 +66,46 @@ const Authentication: React.FC<Props> = ({ onAuth, showToast }) => {
         enc.encode(nonce)
       );
       const signatureBase64 = btoa(String.fromCharCode(...new Uint8Array(signature)));
-      const verifyResp = await verify(email, signatureBase64);
-      localStorage.setItem('jwt', verifyResp.token);
-      onAuth(verifyResp.token);
+      const verifyRespRaw = await verify(email, signatureBase64);
+      console.log('verifyResp:', verifyRespRaw, typeof verifyRespRaw, Object.keys(verifyRespRaw));
+      const verifyResp = typeof verifyRespRaw === 'string' ? JSON.parse(verifyRespRaw) : verifyRespRaw;
+      // --- ECDH Key Exchange ---
+      const { token, server_ecdh_public_key } = verifyResp;
+      console.log('token:', token, typeof token, token && token.length);
+      console.log('token === undefined:', token === undefined);
+      console.log('token === null:', token === null);
+      console.log('token === "":', token === "");
+      console.log('typeof token:', typeof token);
+      console.log('token.trim():', token.trim());
+      console.log('!token.trim():', !token.trim());
+      if (typeof token !== "string" || !token.trim()) {
+        console.error('No authentication token found in verifyResp:', verifyResp);
+        throw new Error('No authentication token found [DEBUG-2]');
+      }
+      if (!server_ecdh_public_key) {
+        console.error('No server ECDH public key found in verifyResp:', verifyResp);
+        throw new Error('No server ECDH public key received');
+      }
+      // 1. Generate client ECDH key pair
+      const clientECDHKeyPair = await generateECDHKeyPair();
+      // 2. Export client ECDH public key (PEM)
+      const clientECDHPublicKeyPem = await exportECDHPublicKey(clientECDHKeyPair.publicKey);
+      // 3. Send client ECDH public key to backend
+      console.log('Setting jwt in localStorage:', token);
+      localStorage.setItem('jwt', token);
+      console.log('jwt in localStorage after set:', localStorage.getItem('jwt'));
+      await sendECDHPublicKey(clientECDHPublicKeyPem);
+      // 4. Import server ECDH public key
+      const serverECDHPublicKey = await importECDHPublicKey(server_ecdh_public_key);
+      // 5. Derive shared secret
+      const sharedSecret = await deriveSharedSecret(clientECDHKeyPair.privateKey, serverECDHPublicKey);
+      // Store shared secret in memory (for demo; replace with secure storage as needed)
+      (window as any).sessionSharedSecret = sharedSecret;
+      onAuth(token);
       showToast('Authentication successful! Welcome back.', 'success');
       setEmail('');
     } catch (err: any) {
+      console.error('Authentication error:', err);
       const errorMessage = err?.message || err || 'Authentication failed';
       setError(errorMessage);
       showToast('Authentication failed: ' + errorMessage, 'error');

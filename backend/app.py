@@ -21,6 +21,35 @@ import uuid
 from database.models import Session, AuthLog
 from utils.email_utils import send_notification_email
 from mail import mail
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.backends import default_backend
+import base64
+import os
+
+# AES-GCM encryption/decryption utilities
+
+def derive_aes_key_from_shared_secret(shared_secret: bytes) -> bytes:
+    digest = hashes.Hash(hashes.SHA256(), backend=default_backend())
+    digest.update(shared_secret)
+    return digest.finalize()
+
+def aes_gcm_encrypt(plaintext: bytes, key: bytes, iv: bytes) -> bytes:
+    encryptor = Cipher(
+        algorithms.AES(key),
+        modes.GCM(iv),
+        backend=default_backend()
+    ).encryptor()
+    ciphertext = encryptor.update(plaintext) + encryptor.finalize()
+    return ciphertext, encryptor.tag
+
+def aes_gcm_decrypt(ciphertext: bytes, key: bytes, iv: bytes, tag: bytes) -> bytes:
+    decryptor = Cipher(
+        algorithms.AES(key),
+        modes.GCM(iv, tag),
+        backend=default_backend()
+    ).decryptor()
+    return decryptor.update(ciphertext) + decryptor.finalize()
 
 app = Flask(__name__)
 CORS(app, origins=["http://localhost:3000"], supports_credentials=True)
@@ -92,8 +121,8 @@ def auth_verify():
     email = data.get('email')
     signature = data.get('signature')
     print("==== DEBUG START ====")
-    print("Email:", email)
-    print("Signature (raw):", signature)
+    # print("Email:", email)
+    # print("Signature (raw):", signature)
     user = get_user_by_email(email)
     if not user:
         print("User not found")
@@ -107,15 +136,15 @@ def auth_verify():
         # Always decode as base64
         try:
             signature_bytes = base64.b64decode(signature)
-            print("Signature decoded as base64:", binascii.hexlify(signature_bytes))
+            # print("Signature decoded as base64:", binascii.hexlify(signature_bytes))
         except Exception as e:
             print("Base64 decode failed:", e)
             return jsonify({'error': 'Signature decode failed.'}), 400
 
-        print("Signature bytes length:", len(signature_bytes))
-        print("Nonce (utf-8):", nonce.encode('utf-8'))
-        print("Nonce (raw):", nonce)
-        print("Public key PEM:", user.public_key)
+        # print("Signature bytes length:", len(signature_bytes))
+        # print("Nonce (utf-8):", nonce.encode('utf-8'))
+        # print("Nonce (raw):", nonce)
+        # print("Public key PEM:", user.public_key)
         public_key = serialization.load_pem_public_key(user.public_key)
         print("Verifying signature...")
         der_sig = raw_to_der(signature_bytes)
@@ -136,6 +165,19 @@ def auth_verify():
         )
         db.session.add(session)
         db.session.commit()
+        # --- ECDH Key Exchange: Generate ephemeral ECDH key pair ---
+        from crypto.ecc_operations import generate_private_key, get_public_key, serialize_public_key
+        server_ecdh_private_key = generate_private_key()
+        server_ecdh_public_key = get_public_key(server_ecdh_private_key)
+        server_ecdh_public_pem = serialize_public_key(server_ecdh_public_key)
+        # Store the server's ECDH private key in Redis, keyed by session_id (PEM serialized)
+        server_ecdh_private_pem = server_ecdh_private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption()
+        )
+        redis_client.setex(f'ecdh_privkey:{session_id}', 3600, server_ecdh_private_pem.decode('utf-8'))
+        # --- End ECDH Key Exchange ---
         # Log successful authentication
         log = AuthLog(
             log_id=str(uuid.uuid4()),
@@ -167,7 +209,8 @@ def auth_verify():
             recipient=email,
             body=f"A new login to your ECC Passwordless MFA account was detected at {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}. If this wasn't you, please contact support."
         )
-        return jsonify({'token': token}), 200
+        # --- Return server's ECDH public key in response ---
+        return jsonify({'token': token, 'server_ecdh_public_key': server_ecdh_public_pem.decode('utf-8')}), 200
     except Exception as e:
         print("Verification exception:", str(e))
         traceback.print_exc()
@@ -228,6 +271,107 @@ def get_profile():
         import traceback
         traceback.print_exc()
         return jsonify({'error': 'Internal server error.'}), 500
+
+@app.route('/session/ecdh', methods=['POST'])
+def session_ecdh():
+    """Receive client's ECDH public key, derive shared secret, and store it for the session."""
+    auth_header = request.headers.get('Authorization')
+    if not auth_header or not auth_header.startswith('Bearer '):
+        return jsonify({'error': 'Authorization header required.'}), 401
+    token = auth_header.split(' ')[1]
+    try:
+        payload = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
+        session_id = payload.get('session_id')
+        if not session_id:
+            return jsonify({'error': 'Invalid token: no session_id.'}), 401
+        data = request.get_json()
+        client_ecdh_public_pem = data.get('client_ecdh_public_key')
+        if not client_ecdh_public_pem:
+            return jsonify({'error': 'client_ecdh_public_key is required.'}), 400
+        # Retrieve server's ECDH private key from Redis
+        server_ecdh_private_pem = redis_client.get(f'ecdh_privkey:{session_id}')
+        if not server_ecdh_private_pem:
+            return jsonify({'error': 'Server ECDH private key not found or expired.'}), 400
+        from cryptography.hazmat.primitives import serialization
+        from crypto.ecdh_handler import derive_shared_secret
+        # Load server's ECDH private key
+        server_ecdh_private_key = serialization.load_pem_private_key(
+            server_ecdh_private_pem.encode('utf-8'), password=None
+        )
+        # Load client's ECDH public key
+        client_ecdh_public_key = serialization.load_pem_public_key(
+            client_ecdh_public_pem.encode('utf-8')
+        )
+        # Derive shared secret
+        shared_secret = derive_shared_secret(server_ecdh_private_key, client_ecdh_public_key)
+        # Store shared secret in Redis (base64 encoded)
+        import base64
+        shared_secret_b64 = base64.b64encode(shared_secret).decode('utf-8')
+        redis_client.setex(f'session_secret:{session_id}', 3600, shared_secret_b64)
+        return jsonify({'message': 'Shared secret established.'}), 200
+    except jwt.ExpiredSignatureError:
+        return jsonify({'error': 'Token expired.'}), 401
+    except jwt.InvalidTokenError:
+        return jsonify({'error': 'Invalid token.'}), 401
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Failed to establish shared secret: {str(e)}'}), 500
+
+@app.route('/session/secure-data', methods=['POST'])
+def session_secure_data():
+    """Accepts encrypted payload, decrypts using session's shared secret, and returns encrypted response."""
+    auth_header = request.headers.get('Authorization')
+    if not auth_header or not auth_header.startswith('Bearer '):
+        return jsonify({'error': 'Authorization header required.'}), 401
+    token = auth_header.split(' ')[1]
+    try:
+        payload = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
+        session_id = payload.get('session_id')
+        if not session_id:
+            return jsonify({'error': 'Invalid token: no session_id.'}), 401
+        data = request.get_json()
+        ciphertext_b64 = data.get('ciphertext')
+        iv_b64 = data.get('iv')
+        if not ciphertext_b64 or not iv_b64:
+            return jsonify({'error': 'ciphertext and iv are required.'}), 400
+        # Retrieve shared secret from Redis
+        shared_secret_b64 = redis_client.get(f'session_secret:{session_id}')
+        if not shared_secret_b64:
+            return jsonify({'error': 'Session shared secret not found.'}), 400
+        shared_secret = base64.b64decode(shared_secret_b64)
+        aes_key = derive_aes_key_from_shared_secret(shared_secret)
+        ciphertext = base64.b64decode(ciphertext_b64)
+        iv = base64.b64decode(iv_b64)
+        # Split last 16 bytes as tag, rest as ciphertext
+        if len(ciphertext) < 16:
+            return jsonify({'error': 'Ciphertext too short for tag.'}), 400
+        tag = ciphertext[-16:]
+        ct = ciphertext[:-16]
+        # Decrypt
+        try:
+            plaintext = aes_gcm_decrypt(ct, aes_key, iv, tag)
+        except Exception as e:
+            return jsonify({'error': f'Decryption failed: {str(e)}'}), 400
+        # Demo: echo the plaintext back, uppercased
+        response_plaintext = plaintext.decode('utf-8').upper().encode('utf-8')
+        # Encrypt response
+        response_iv = os.urandom(12)
+        response_ciphertext, response_tag = aes_gcm_encrypt(response_plaintext, aes_key, response_iv)
+        # Append tag to ciphertext and return as one field
+        resp_full_ciphertext = response_ciphertext + response_tag
+        return jsonify({
+            'ciphertext': base64.b64encode(resp_full_ciphertext).decode('utf-8'),
+            'iv': base64.b64encode(response_iv).decode('utf-8')
+        }), 200
+    except jwt.ExpiredSignatureError:
+        return jsonify({'error': 'Token expired.'}), 401
+    except jwt.InvalidTokenError:
+        return jsonify({'error': 'Invalid token.'}), 401
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Failed to process secure data: {str(e)}'}), 500
 
 @app.cli.command('create-db')
 def create_db():

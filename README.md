@@ -10,6 +10,7 @@ A modern passwordless multi-factor authentication system using Elliptic Curve Cr
 - **Modern Web Interface**: React-based frontend with TypeScript
 - **RESTful API**: Flask-based backend with comprehensive API endpoints
 - **Docker Support**: Containerized deployment with Docker Compose
+- **Improved Debugging**: Cleaner backend debug output for easier troubleshooting
 
 ## Project Structure
 
@@ -75,7 +76,14 @@ ECCforPasswordlessMFA/
    pip install -r requirements.txt
    ```
 
-4. Run the Flask application:
+4. Set up environment variables:
+   ```bash
+   # Copy the example environment file
+   cp ../env.example .env
+   # Edit .env with your actual values
+   ```
+
+5. Run the Flask application:
    ```bash
    python app.py
    ```
@@ -112,6 +120,26 @@ The backend provides RESTful API endpoints for:
 - **Session Management**: Secure session handling with token-based authentication
 - **Input Validation**: Comprehensive input validation and sanitization
 - **CORS Protection**: Cross-Origin Resource Sharing protection
+
+## Troubleshooting
+
+### Duplicate Backend Debug Output
+- The backend debug output has been cleaned up. If you still see duplicate logs, ensure your frontend is not making multiple requests to `/auth/verify` per authentication attempt.
+
+### Authentication Token Issues
+- The frontend now ensures the JWT token is set in `localStorage` before making secure requests. If you see "No authentication token found", check that the token is being set and read correctly.
+
+### TypeScript Argument Errors
+- If you see errors like `TS2554: Expected 3 arguments, but got 4`, check your function calls and ensure you are passing the correct number of arguments as defined in the service/util files.
+
+### Docker Image Pull/Timeout Issues
+- If you encounter errors pulling Docker images (e.g., `TLS handshake timeout`), check your internet connection, retry the build, or increase Docker's network timeout using:
+  ```
+  set DOCKER_CLIENT_TIMEOUT=300
+  set COMPOSE_HTTP_TIMEOUT=300
+  docker-compose build --no-cache
+  ```
+  (Use `export` instead of `set` on Linux/macOS.)
 
 ## Contributing
 

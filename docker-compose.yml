@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   backend:
-    build: ./backendd
+    build: ./backend
     ports:
       - "5000:5000"
     env_file:
