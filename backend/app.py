@@ -61,16 +61,16 @@ CORS(app,
      origins=["http://localhost:3000"], 
      supports_credentials=True,
      methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-     allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
+     allow_headers=["Content-Type", "Authorization", "X-Requested-With"],  
      expose_headers=["Content-Type", "Authorization"]
 )
 app.config.from_object(Config)
 limiter = Limiter(key_func=get_remote_address)
 limiter.init_app(app)
 db.init_app(app)
-
+  
 # Add Flask-Talisman for security headers and HTTPS enforcement
-Talisman(app, 
+Talisman(app,
          content_security_policy=None,
          force_https=False,  # Disable HTTPS enforcement for testing
          strict_transport_security=False,  # Disable HSTS for testing
