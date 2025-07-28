@@ -3,6 +3,8 @@ import Registration from './components/Registration';
 import Authentication from './components/Authentication';
 import Dashboard from './components/Dashboard';
 import KeyManagement from './components/KeyManagement';
+import BackupKeyManagement from './components/BackupKeyManagement';
+import Recovery from './components/Recovery';
 import Profile from './components/Profile';
 import Toast from './components/Toast';
 import './App.css';
@@ -14,7 +16,8 @@ const App: React.FC = () => {
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     return (localStorage.getItem('theme') as 'light' | 'dark') || 'dark';
   });
-  const [activeComponent, setActiveComponent] = useState<'dashboard' | 'profile' | 'keys'>('dashboard');
+  const [activeComponent, setActiveComponent] = useState<'dashboard' | 'profile' | 'keys' | 'backup'>('dashboard');
+  const [showRecovery, setShowRecovery] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
   const mainContentRef = useRef<HTMLDivElement>(null);
   const skipLinkRef = useRef<HTMLAnchorElement>(null);
@@ -104,6 +107,15 @@ const App: React.FC = () => {
     mainContentRef.current?.focus();
   };
 
+  // Check if we're on recovery page
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const recoveryToken = urlParams.get('token');
+    if (recoveryToken) {
+      setShowRecovery(true);
+    }
+  }, []);
+
   return (
     <>
       {/* Skip to main content link for screen readers */}
@@ -125,10 +137,42 @@ const App: React.FC = () => {
           </h1>
         </header>
 
-        {!jwt ? (
+        {showRecovery ? (
+          <main role="main" aria-label="Recovery section">
+            <Recovery showToast={showToast} />
+          </main>
+        ) : !jwt ? (
           <main role="main" aria-label="Authentication section">
             <Registration showToast={showToast} />
             <Authentication onAuth={handleAuth} showToast={showToast} />
+            <div style={{ 
+              textAlign: 'center', 
+              marginTop: '2rem',
+              padding: '1rem',
+              borderTop: '1px solid var(--color-border)'
+            }}>
+              <p style={{ 
+                marginBottom: '1rem',
+                color: 'var(--color-main)',
+                opacity: 0.7
+              }}>
+                Lost access to your device?
+              </p>
+              <button
+                onClick={() => setShowRecovery(true)}
+                style={{
+                  background: 'none',
+                  border: '1px solid var(--color-accent)',
+                  color: 'var(--color-accent)',
+                  borderRadius: 6,
+                  padding: '8px 16px',
+                  fontSize: '0.9em',
+                  cursor: 'pointer'
+                }}
+              >
+                Recover Account
+              </button>
+            </div>
           </main>
         ) : (
           <>
@@ -139,11 +183,19 @@ const App: React.FC = () => {
                     className={`tab-btn${activeComponent === 'dashboard' ? ' tab-btn-active' : ''}`}
                     onClick={() => setActiveComponent('dashboard')}
                     role="tab"
-                    aria-selected={activeComponent === 'dashboard'}
                     aria-controls="dashboard-panel"
                     aria-label="Dashboard"
                     title="Dashboard"
-                    style={{ fontSize: '1.7em', padding: '0.5em 0.7em' }}
+                    style={{ 
+                      fontSize: '1.2em', 
+                      padding: '0.3em', 
+                      width: '40px', 
+                      height: '40px',
+                      borderRadius: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
                   >
                     <span role="img" aria-label="Dashboard">🏠</span>
                   </button>
@@ -151,11 +203,19 @@ const App: React.FC = () => {
                     className={`tab-btn${activeComponent === 'profile' ? ' tab-btn-active' : ''}`}
                     onClick={() => setActiveComponent('profile')}
                     role="tab"
-                    aria-selected={activeComponent === 'profile'}
                     aria-controls="profile-panel"
                     aria-label="Profile"
                     title="Profile"
-                    style={{ fontSize: '1.7em', padding: '0.5em 0.7em' }}
+                    style={{ 
+                      fontSize: '1.2em', 
+                      padding: '0.3em', 
+                      width: '40px', 
+                      height: '40px',
+                      borderRadius: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
                   >
                     <span role="img" aria-label="Profile">👤</span>
                   </button>
@@ -163,13 +223,41 @@ const App: React.FC = () => {
                     className={`tab-btn${activeComponent === 'keys' ? ' tab-btn-active' : ''}`}
                     onClick={() => setActiveComponent('keys')}
                     role="tab"
-                    aria-selected={activeComponent === 'keys'}
                     aria-controls="keys-panel"
                     aria-label="Keys"
                     title="Keys"
-                    style={{ fontSize: '1.7em', padding: '0.5em 0.7em' }}
+                    style={{ 
+                      fontSize: '1.2em', 
+                      padding: '0.3em', 
+                      width: '40px', 
+                      height: '40px',
+                      borderRadius: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
                   >
                     <span role="img" aria-label="Keys">🔑</span>
+                  </button>
+                  <button
+                    className={`tab-btn${activeComponent === 'backup' ? ' tab-btn-active' : ''}`}
+                    onClick={() => setActiveComponent('backup')}
+                    role="tab"
+                    aria-controls="backup-panel"
+                    aria-label="Backup"
+                    title="Backup"
+                    style={{ 
+                      fontSize: '1.2em', 
+                      padding: '0.3em', 
+                      width: '40px', 
+                      height: '40px',
+                      borderRadius: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                  >
+                    <span role="img" aria-label="Backup">💾</span>
                   </button>
                 </div>
                 <button
@@ -177,9 +265,18 @@ const App: React.FC = () => {
                   onClick={handleLogout}
                   aria-label="Logout"
                   title="Logout"
-                  style={{ fontSize: '1.7em', padding: '0.5em 0.7em' }}
+                  style={{ 
+                    fontSize: '1.2em', 
+                    padding: '0.3em', 
+                    width: '40px', 
+                    height: '40px',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
                 >
-                  <span role="img" aria-label="Logout">🚪</span>
+                  <span role="img" aria-label="Logout">⏻</span>
                 </button>
               </div>
             </nav>
@@ -188,7 +285,6 @@ const App: React.FC = () => {
                  role="tabpanel"
                  id="dashboard-panel"
                  aria-labelledby="dashboard-tab"
-                 aria-hidden={activeComponent !== 'dashboard'}
                  style={{ display: activeComponent === 'dashboard' ? 'block' : 'none' }}
                >
                  {activeComponent === 'dashboard' && <Dashboard jwt={jwt} />}
@@ -197,7 +293,6 @@ const App: React.FC = () => {
                  role="tabpanel"
                  id="profile-panel"
                  aria-labelledby="profile-tab"
-                 aria-hidden={activeComponent !== 'profile'}
                  style={{ display: activeComponent === 'profile' ? 'block' : 'none' }}
                >
                  {activeComponent === 'profile' && <Profile />}
@@ -206,10 +301,17 @@ const App: React.FC = () => {
                  role="tabpanel"
                  id="keys-panel"
                  aria-labelledby="keys-tab"
-                 aria-hidden={activeComponent !== 'keys'}
                  style={{ display: activeComponent === 'keys' ? 'block' : 'none' }}
                >
                  {activeComponent === 'keys' && <KeyManagement showToast={showToast} />}
+               </div>
+               <div
+                 role="tabpanel"
+                 id="backup-panel"
+                 aria-labelledby="backup-tab"
+                 style={{ display: activeComponent === 'backup' ? 'block' : 'none' }}
+               >
+                 {activeComponent === 'backup' && <BackupKeyManagement showToast={showToast} />}
                </div>
             </main>
           </>
@@ -225,7 +327,6 @@ const App: React.FC = () => {
         aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
         onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
         title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-        aria-pressed={theme === 'dark'}
       >
         <span aria-hidden="true">{theme === 'dark' ? '🌞' : '🌙'}</span>
       </button>

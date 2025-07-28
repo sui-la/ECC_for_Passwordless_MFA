@@ -9,8 +9,19 @@ export async function generateKeyPair() {
   );
 }
 
-export async function signMessage(privateKey: CryptoKey, message: ArrayBuffer) {
-  // TODO: Use Web Crypto API to sign message
+export async function signMessage(privateKey: CryptoKey, message: string | ArrayBufferLike): Promise<string> {
+  let data: Uint8Array;
+  if (typeof message === 'string') {
+    data = new TextEncoder().encode(message);
+  } else {
+    data = new Uint8Array(message);
+  }
+  const signature = await window.crypto.subtle.sign(
+    { name: 'ECDSA', hash: 'SHA-256' },
+    privateKey,
+    data
+  );
+  return window.btoa(String.fromCharCode(...new Uint8Array(signature)));
 }
 
 export async function exportPublicKey(publicKey: CryptoKey): Promise<string> {

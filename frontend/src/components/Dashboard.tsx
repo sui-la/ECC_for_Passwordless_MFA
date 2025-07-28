@@ -74,7 +74,11 @@ const Dashboard: React.FC<Props> = ({ jwt }) => {
       // Send full ciphertext (with tag appended) and iv
       const resp = await sendSecureData(ciphertext, iv);
       // Decrypt response (full ciphertext with tag appended)
-      const decrypted = await aesGcmDecrypt(resp.ciphertext, resp.iv, aesKey);
+      const decrypted = await aesGcmDecrypt(
+        resp.ciphertext,
+        resp.iv,
+        aesKey
+      );
       setSecureResponse(decrypted);
     } catch (err: any) {
       setSecureError(err?.message || err || 'Secure data exchange failed');
@@ -184,27 +188,53 @@ const Dashboard: React.FC<Props> = ({ jwt }) => {
         )}
         <hr className="dashboard-divider" aria-hidden="true" style={{ margin: '24px 0' }} />
         <h3 style={{ margin: '10px 0 6px 0', fontWeight: 600 }}>Secure Data Exchange Demo</h3>
-        <form onSubmit={handleSendSecure} style={{ marginBottom: 16 }}>
-          <label htmlFor="secure-message">Message to send securely:</label>
+        <form onSubmit={handleSendSecure} style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
+          <label htmlFor="secure-message" style={{ fontWeight: 500, marginBottom: 4 }}>Message to send securely:</label>
           <input
             id="secure-message"
             type="text"
             value={secureMessage}
             onChange={e => setSecureMessage(e.target.value)}
             disabled={secureLoading}
-            style={{ width: '100%', marginBottom: 8 }}
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              borderRadius: 6,
+              border: '1px solid #3a506b',
+              background: '#232b3e',
+              color: '#e0e6f0',
+              fontSize: '1em',
+              marginBottom: 8
+            }}
+            placeholder="Type your message..."
           />
-          <button type="submit" disabled={secureLoading || !secureMessage}>
+          <button
+            type="submit"
+            disabled={secureLoading || !secureMessage}
+            style={{
+              background: secureLoading || !secureMessage ? '#3a506b' : '#2196f3',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 6,
+              padding: '8px 16px',
+              fontWeight: 600,
+              fontSize: '1em',
+              cursor: secureLoading || !secureMessage ? 'not-allowed' : 'pointer',
+              transition: 'background 0.2s',
+              marginTop: 2,
+              alignSelf: 'flex-start'
+            }}
+          >
             {secureLoading ? 'Sending...' : 'Send Securely'}
           </button>
         </form>
         {secureError && (
-          <div className="alert alert-error" role="alert" aria-live="polite">
+          <div className="alert alert-error" role="alert" aria-live="polite" style={{ marginTop: 10 }}>
             <span aria-hidden="true">⚠️</span> {secureError}
           </div>
         )}
         {secureResponse && (
-          <div className="alert alert-success" role="status" aria-live="polite">
+          <div className="alert alert-success" role="status" aria-live="polite" style={{ marginTop: 10 }}>
             <span aria-hidden="true">🔐</span> Response: <strong>{secureResponse}</strong>
           </div>
         )}

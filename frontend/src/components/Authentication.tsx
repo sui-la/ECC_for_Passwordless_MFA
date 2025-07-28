@@ -5,7 +5,8 @@ import {
   generateECDHKeyPair, 
   exportECDHPublicKey, 
   importECDHPublicKey, 
-  deriveSharedSecret 
+  deriveSharedSecret, 
+  signMessage 
 } from '../services/crypto';
 import { sendECDHPublicKey } from '../services/api';
 
@@ -58,14 +59,12 @@ const Authentication: React.FC<Props> = ({ onAuth, showToast }) => {
       
       const privateKey = await loadPrivateKey();
       if (!privateKey) throw new Error('No private key found. Please register first.');
-      
-      const enc = new TextEncoder();
-      const signature = await window.crypto.subtle.sign(
-        { name: 'ECDSA', hash: 'SHA-256' },
-        privateKey,
-        enc.encode(nonce)
-      );
-      const signatureBase64 = btoa(String.fromCharCode(...new Uint8Array(signature)));
+      let signatureBase64: string;
+      try {
+        signatureBase64 = await signMessage(privateKey, nonce);
+      } catch (signErr: any) {
+        throw new Error('Failed to sign challenge: ' + (signErr?.message || signErr));
+      }
       const verifyRespRaw = await verify(email, signatureBase64);
       console.log('verifyResp:', verifyRespRaw, typeof verifyRespRaw, Object.keys(verifyRespRaw));
       const verifyResp = typeof verifyRespRaw === 'string' ? JSON.parse(verifyRespRaw) : verifyRespRaw;

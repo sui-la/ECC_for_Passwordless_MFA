@@ -1,28 +1,25 @@
-// jest-dom adds custom jest matchers for asserting on DOM nodes.
-// allows you to do things like:
-// expect(element).toHaveTextContent(/react/i)
-// learn more: https://github.com/testing-library/jest-dom
 import '@testing-library/jest-dom';
 
 // Mock TextEncoder and TextDecoder
-global.TextEncoder = class TextEncoder {
+class MockTextEncoder {
   encode(input: string): Uint8Array {
-    return new Uint8Array(Buffer.from(input, 'utf8'));
+    const buffer = Buffer.from(input, 'utf8');
+    return new Uint8Array(buffer);
   }
-} as any;
+}
 
-global.TextDecoder = class TextDecoder {
+class MockTextDecoder {
   decode(input: Uint8Array): string {
     return Buffer.from(input).toString('utf8');
   }
-} as any;
+}
 
 // Mock atob and btoa
-global.atob = (str: string): string => {
+const mockAtob = (str: string): string => {
   return Buffer.from(str, 'base64').toString('binary');
 };
 
-global.btoa = (str: string): string => {
+const mockBtoa = (str: string): string => {
   return Buffer.from(str, 'binary').toString('base64');
 };
 
@@ -61,6 +58,59 @@ const indexedDBMock = {
 // Mock fetch
 global.fetch = jest.fn();
 
+// Mock console methods to reduce noise in tests
+global.console = {
+  ...console,
+  log: jest.fn(),
+  debug: jest.fn(),
+  info: jest.fn(),
+  warn: jest.fn(),
+  error: jest.fn(),
+};
+
+// Set up all global mocks
+Object.defineProperty(global, 'TextEncoder', {
+  value: MockTextEncoder,
+  writable: true,
+  configurable: true,
+});
+
+Object.defineProperty(global, 'TextDecoder', {
+  value: MockTextDecoder,
+  writable: true,
+  configurable: true,
+});
+
+Object.defineProperty(global, 'atob', {
+  value: mockAtob,
+  writable: true,
+  configurable: true,
+});
+
+Object.defineProperty(global, 'btoa', {
+  value: mockBtoa,
+  writable: true,
+  configurable: true,
+});
+
+Object.defineProperty(global, 'crypto', {
+  value: mockCrypto,
+  writable: true,
+  configurable: true,
+});
+
+Object.defineProperty(global, 'localStorage', {
+  value: localStorageMock,
+  writable: true,
+  configurable: true,
+});
+
+Object.defineProperty(global, 'indexedDB', {
+  value: indexedDBMock,
+  writable: true,
+  configurable: true,
+});
+
 // Set up window mocks
 Object.defineProperty(window, 'crypto', {
   value: mockCrypto,
@@ -81,4 +131,4 @@ Object.defineProperty(window, 'indexedDB', {
 });
 
 // Export mocks for use in tests
-export { mockCrypto, mockCryptoSubtle, localStorageMock, indexedDBMock };
+export { mockCrypto, mockCryptoSubtle, localStorageMock, indexedDBMock }; 
