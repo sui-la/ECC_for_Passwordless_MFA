@@ -3,10 +3,11 @@ import Registration from './components/Registration';
 import Authentication from './components/Authentication';
 import Dashboard from './components/Dashboard';
 import KeyManagement from './components/KeyManagement';
-import BackupKeyManagement from './components/BackupKeyManagement';
+
 import Recovery from './components/Recovery';
 import Profile from './components/Profile';
 import Toast from './components/Toast';
+import { clearSessionSharedSecret } from './services/storage';
 import './App.css';
 
 const App: React.FC = () => {
@@ -16,7 +17,7 @@ const App: React.FC = () => {
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     return (localStorage.getItem('theme') as 'light' | 'dark') || 'dark';
   });
-  const [activeComponent, setActiveComponent] = useState<'dashboard' | 'profile' | 'keys' | 'backup'>('dashboard');
+  const [activeComponent, setActiveComponent] = useState<'dashboard' | 'profile' | 'keys'>('dashboard');
   const [showRecovery, setShowRecovery] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
   const mainContentRef = useRef<HTMLDivElement>(null);
@@ -96,6 +97,19 @@ const App: React.FC = () => {
     showToast('You have been logged out.', 'info');
     // Focus main content after logout
     mainContentRef.current?.focus();
+    clearSessionSharedSecret();
+  };
+
+  const handleReAuthenticate = () => {
+    // Clear all session data
+    localStorage.removeItem('jwt');
+    localStorage.removeItem('sessionSharedSecret');
+    localStorage.removeItem('sessionStartTime');
+    setJwt(null);
+    setShowLogoutModal(false);
+    showToast('Please re-authenticate to continue.', 'info');
+    // Focus main content after logout
+    mainContentRef.current?.focus();
   };
 
   const cancelLogout = () => {
@@ -139,7 +153,7 @@ const App: React.FC = () => {
 
         {showRecovery ? (
           <main role="main" aria-label="Recovery section">
-            <Recovery showToast={showToast} />
+            <Recovery showToast={showToast} onBack={() => setShowRecovery(false)} />
           </main>
         ) : !jwt ? (
           <main role="main" aria-label="Authentication section">
@@ -239,26 +253,7 @@ const App: React.FC = () => {
                   >
                     <span role="img" aria-label="Keys">🔑</span>
                   </button>
-                  <button
-                    className={`tab-btn${activeComponent === 'backup' ? ' tab-btn-active' : ''}`}
-                    onClick={() => setActiveComponent('backup')}
-                    role="tab"
-                    aria-controls="backup-panel"
-                    aria-label="Backup"
-                    title="Backup"
-                    style={{ 
-                      fontSize: '1.2em', 
-                      padding: '0.3em', 
-                      width: '40px', 
-                      height: '40px',
-                      borderRadius: '8px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center'
-                    }}
-                  >
-                    <span role="img" aria-label="Backup">💾</span>
-                  </button>
+
                 </div>
                 <button
                   className="logout-btn"
@@ -287,7 +282,7 @@ const App: React.FC = () => {
                  aria-labelledby="dashboard-tab"
                  style={{ display: activeComponent === 'dashboard' ? 'block' : 'none' }}
                >
-                 {activeComponent === 'dashboard' && <Dashboard jwt={jwt} />}
+                 {activeComponent === 'dashboard' && <Dashboard jwt={jwt} showToast={showToast} onReAuthenticate={handleReAuthenticate} />}
                </div>
                <div
                  role="tabpanel"
@@ -305,14 +300,7 @@ const App: React.FC = () => {
                >
                  {activeComponent === 'keys' && <KeyManagement showToast={showToast} />}
                </div>
-               <div
-                 role="tabpanel"
-                 id="backup-panel"
-                 aria-labelledby="backup-tab"
-                 style={{ display: activeComponent === 'backup' ? 'block' : 'none' }}
-               >
-                 {activeComponent === 'backup' && <BackupKeyManagement showToast={showToast} />}
-               </div>
+
             </main>
           </>
         )}

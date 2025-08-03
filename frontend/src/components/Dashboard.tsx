@@ -1,19 +1,25 @@
 import React, { useEffect, useState } from 'react';
 import { sendSecureData } from '../services/api';
 import { importAesKeyFromSharedSecret, aesGcmEncrypt, aesGcmDecrypt } from '../services/crypto';
+import { getValidSessionSecret } from '../services/storage';
+import SecureMessaging from './SecureMessaging';
 
 interface Props {
-  jwt: string | null;
+  jwt?: string | null;
+  showToast?: (message: string, type?: 'success' | 'error' | 'info') => void;
+  onReAuthenticate?: () => void;
 }
 
 interface UserInfo {
-  email?: string;
-  iat?: number;
-  exp?: number;
-  [key: string]: any;
+  user_id: string;
+  email: string;
+  exp: number; //expires at
+  iat: number; //issued at
+  device_id: string;
+  session_id: string;
 }
 
-const Dashboard: React.FC<Props> = ({ jwt }) => {
+const Dashboard: React.FC<Props> = ({ jwt, showToast, onReAuthenticate }) => {
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -22,6 +28,7 @@ const Dashboard: React.FC<Props> = ({ jwt }) => {
   const [secureResponse, setSecureResponse] = useState<string | null>(null);
   const [secureError, setSecureError] = useState<string | null>(null);
   const [secureLoading, setSecureLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<'demo' | 'messaging'>('demo');
 
   useEffect(() => {
     if (jwt) {
@@ -65,8 +72,8 @@ const Dashboard: React.FC<Props> = ({ jwt }) => {
     setSecureResponse(null);
     setSecureLoading(true);
     try {
-      // Get the session shared secret from window
-      const sharedSecret = (window as any).sessionSharedSecret;
+      // Get the session shared secret from localStorage
+      const sharedSecret = await getValidSessionSecret();
       if (!sharedSecret) throw new Error('No session shared secret found. Please re-authenticate.');
       const aesKey = await importAesKeyFromSharedSecret(sharedSecret);
       // Encrypt the message
@@ -187,57 +194,115 @@ const Dashboard: React.FC<Props> = ({ jwt }) => {
           </div>
         )}
         <hr className="dashboard-divider" aria-hidden="true" style={{ margin: '24px 0' }} />
-        <h3 style={{ margin: '10px 0 6px 0', fontWeight: 600 }}>Secure Data Exchange Demo</h3>
-        <form onSubmit={handleSendSecure} style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
-          <label htmlFor="secure-message" style={{ fontWeight: 500, marginBottom: 4 }}>Message to send securely:</label>
-          <input
-            id="secure-message"
-            type="text"
-            value={secureMessage}
-            onChange={e => setSecureMessage(e.target.value)}
-            disabled={secureLoading}
-            style={{
-              width: '100%',
-              padding: '8px 12px',
-              borderRadius: 6,
-              border: '1px solid #3a506b',
-              background: '#232b3e',
-              color: '#e0e6f0',
-              fontSize: '1em',
-              marginBottom: 8
-            }}
-            placeholder="Type your message..."
-          />
+        
+        {/* Tab Navigation */}
+        <div style={{ display: 'flex', gap: 2, marginBottom: 16 }}>
           <button
-            type="submit"
-            disabled={secureLoading || !secureMessage}
+            onClick={() => setActiveTab('demo')}
             style={{
-              background: secureLoading || !secureMessage ? '#3a506b' : '#2196f3',
+              background: activeTab === 'demo' ? '#2196f3' : '#3a506b',
               color: '#fff',
               border: 'none',
-              borderRadius: 6,
+              borderRadius: '6px 6px 0 0',
               padding: '8px 16px',
               fontWeight: 600,
-              fontSize: '1em',
-              cursor: secureLoading || !secureMessage ? 'not-allowed' : 'pointer',
-              transition: 'background 0.2s',
-              marginTop: 2,
-              alignSelf: 'flex-start'
+              fontSize: '0.9em',
+              cursor: 'pointer',
+              transition: 'background 0.2s'
             }}
           >
-            {secureLoading ? 'Sending...' : 'Send Securely'}
+            Secure Data Demo
           </button>
-        </form>
-        {secureError && (
-          <div className="alert alert-error" role="alert" aria-live="polite" style={{ marginTop: 10 }}>
-            <span aria-hidden="true">⚠️</span> {secureError}
-          </div>
-        )}
-        {secureResponse && (
-          <div className="alert alert-success" role="status" aria-live="polite" style={{ marginTop: 10 }}>
-            <span aria-hidden="true">🔐</span> Response: <strong>{secureResponse}</strong>
-          </div>
-        )}
+          <button
+            onClick={() => setActiveTab('messaging')}
+            style={{
+              background: activeTab === 'messaging' ? '#2196f3' : '#3a506b',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '6px 6px 0 0',
+              padding: '8px 16px',
+              fontWeight: 600,
+              fontSize: '0.9em',
+              cursor: 'pointer',
+              transition: 'background 0.2s'
+            }}
+          >
+            Secure Messaging
+          </button>
+        </div>
+
+        {/* Tab Content */}
+        <div style={{ 
+          border: '1px solid #3a506b', 
+          borderRadius: '0 6px 6px 6px', 
+          padding: 16,
+          background: '#1a2332'
+        }}>
+          {activeTab === 'demo' && (
+            <div>
+              <h3 style={{ margin: '0 0 12px 0', fontWeight: 600 }}>Secure Data Exchange Demo</h3>
+              <form onSubmit={handleSendSecure} style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
+                <label htmlFor="secure-message" style={{ fontWeight: 500, marginBottom: 4 }}>Message to send securely:</label>
+                <input
+                  id="secure-message"
+                  type="text"
+                  value={secureMessage}
+                  onChange={e => setSecureMessage(e.target.value)}
+                  disabled={secureLoading}
+                  style={{
+                    width: '60%',
+                    maxWidth: '400px',
+                    padding: '8px 12px',
+                    borderRadius: 6,
+                    border: '1px solid #3a506b',
+                    background: '#232b3e',
+                    color: '#e0e6f0',
+                    fontSize: '1em',
+                    marginBottom: 8
+                  }}
+                  placeholder="Type your message..."
+                />
+                <button
+                  type="submit"
+                  disabled={secureLoading || !secureMessage}
+                  style={{
+                    background: secureLoading || !secureMessage ? '#3a506b' : '#2196f3',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 6,
+                    padding: '8px 16px',
+                    fontWeight: 600,
+                    fontSize: '1em',
+                    cursor: secureLoading || !secureMessage ? 'not-allowed' : 'pointer',
+                    transition: 'background 0.2s',
+                    marginTop: 2,
+                    alignSelf: 'flex-start'
+                  }}
+                >
+                  {secureLoading ? 'Sending...' : 'Send Securely'}
+                </button>
+              </form>
+              {secureError && (
+                <div className="alert alert-error" role="alert" aria-live="polite" style={{ marginTop: 10 }}>
+                  <span aria-hidden="true">⚠️</span> {secureError}
+                </div>
+              )}
+              {secureResponse && (
+                <div className="alert alert-success" role="status" aria-live="polite" style={{ marginTop: 10 }}>
+                  <span aria-hidden="true">🔐</span> Response: <strong>{secureResponse}</strong>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'messaging' && (
+            <SecureMessaging 
+              showToast={showToast} 
+              onReAuthenticate={onReAuthenticate}
+              currentUserEmail={userInfo?.email}
+            />
+          )}
+        </div>
       </div>
 
       <footer className="dashboard-footer">

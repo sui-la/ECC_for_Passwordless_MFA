@@ -7,11 +7,16 @@ services:
       - "5000:5000"
     env_file:
       - .env
+    environment:
+      - FLASK_ENV=${FLASK_ENV:-development}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://hao:suisui0322@db:5432/eccmfa}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
     depends_on:
       - db
       - redis
     volumes:
       - ./backend:/app
+    restart: unless-stopped
 
   frontend:
     build: ./frontend
@@ -21,34 +26,53 @@ services:
       - .env
     depends_on:
       - backend
+    restart: unless-stopped
 
   db:
     image: postgres:15
     restart: always
     environment:
-      POSTGRES_USER: hao
-      POSTGRES_PASSWORD: suisui0322
-      POSTGRES_DB: eccmfa
+      POSTGRES_USER: ${POSTGRES_USER:-hao}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-suisui0322}
+      POSTGRES_DB: ${POSTGRES_DB:-eccmfa}
     ports:
       - "5432:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hao} -d ${POSTGRES_DB:-eccmfa}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   pgadmin:
     image: dpage/pgadmin4
     restart: always
     environment:
-      PGADMIN_DEFAULT_EMAIL: hao@gmail.com
-      PGADMIN_DEFAULT_PASSWORD: suisui0322
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-hao@gmail.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-suisui0322}
     ports:
       - "8080:80"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+
   redis:
     image: redis:7
     restart: always
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    volumes:
+      - redis_data:/data
 
 volumes:
   db_data:
+  pgadmin_data:
+  redis_data:

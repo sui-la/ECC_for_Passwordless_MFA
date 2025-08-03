@@ -1,33 +1,48 @@
 import React, { useState, useEffect } from 'react';
-import { generateKeyPair, exportPublicKey } from '../services/crypto';
-import { savePrivateKey } from '../services/storage';
-import { register } from '../services/api';
-import { generateDeviceName, detectDeviceInfo, getDetailedDeviceInfo } from '../utils/deviceDetection';
+import { generateKeyPair, exportPublicKey, signMessage, generateECDHKeyPair, exportECDHPublicKey, importECDHPublicKey, deriveSharedSecret } from '../services/crypto';
+import { savePrivateKey, saveSessionSharedSecret } from '../services/storage';
+import { register, getChallenge, verify, sendECDHPublicKey } from '../services/api';
+import { generateDeviceName, detectDeviceInfo, getDetailedDeviceInfo, getCommonDeviceNames } from '../utils/deviceDetection';
+import EmailVerification from './EmailVerification';
 
 interface RegistrationProps {
-  showToast: (message: string, type?: 'success' | 'error' | 'info') => void;
+  showToast?: (message: string, type?: 'success' | 'error' | 'info') => void;
 }
 
 const Registration: React.FC<RegistrationProps> = ({ showToast }) => {
   const [email, setEmail] = useState('');
   const [deviceName, setDeviceName] = useState('');
   const [detectedDeviceInfo, setDetectedDeviceInfo] = useState<string>('');
+  const [deviceOptions, setDeviceOptions] = useState<string[]>([]);
+  const [showCustomInput, setShowCustomInput] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [emailError, setEmailError] = useState<string | null>(null);
   const [deviceNameError, setDeviceNameError] = useState<string | null>(null);
+  const [showEmailVerification, setShowEmailVerification] = useState(false);
+  const [pendingRegistration, setPendingRegistration] = useState<{
+    email: string;
+    deviceName: string;
+    privateKey: CryptoKey;
+    deviceId?: string;
+  } | null>(null);
 
-  // Auto-detect device name on component mount
+  // Auto-detect device name and get device options on component mount
   useEffect(() => {
     try {
       const deviceInfo = detectDeviceInfo();
       const autoDeviceName = generateDeviceName(deviceInfo);
       setDeviceName(autoDeviceName);
       setDetectedDeviceInfo(getDetailedDeviceInfo());
+      
+      // Get common device names for dropdown
+      const options = getCommonDeviceNames();
+      setDeviceOptions(options);
     } catch (err) {
       console.warn('Failed to auto-detect device:', err);
       setDeviceName('Unknown Device');
       setDetectedDeviceInfo('Device detection failed');
+      setDeviceOptions(['Unknown Device', 'Custom Device']);
     }
   }, []);
 
@@ -66,12 +81,46 @@ const Registration: React.FC<RegistrationProps> = ({ showToast }) => {
     }
   };
 
-  const handleDeviceNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleDeviceNameChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const value = e.target.value;
     setDeviceName(value);
+    
+    // If "Custom Device" is selected, show custom input
+    if (value === 'Custom Device') {
+      setShowCustomInput(true);
+      setDeviceName('');
+    } else {
+      setShowCustomInput(false);
+    }
+    
     if (deviceNameError) {
       validateDeviceName(value);
     }
+  };
+
+  const handleEmailVerificationSuccess = async () => {
+    if (!pendingRegistration) return;
+    
+    try {
+      // Store the private key with device ID
+      if (pendingRegistration.deviceId) {
+        await savePrivateKey(pendingRegistration.privateKey, pendingRegistration.deviceId);
+      } else {
+        await savePrivateKey(pendingRegistration.privateKey);
+      }
+      
+      showToast?.('Registration completed successfully! You can now authenticate.', 'success');
+      setShowEmailVerification(false);
+      setPendingRegistration(null);
+    } catch (err: any) {
+      showToast?.('Failed to complete registration: ' + (err?.message || err), 'error');
+    }
+  };
+
+  const handleEmailVerificationCancel = () => {
+    setShowEmailVerification(false);
+    setPendingRegistration(null);
+    showToast?.('Registration cancelled.', 'info');
   };
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -85,20 +134,68 @@ const Registration: React.FC<RegistrationProps> = ({ showToast }) => {
     setLoading(true);
     try {
       const { privateKey, publicKey } = await generateKeyPair();
-      await savePrivateKey(privateKey);
       const publicKeyPem = await exportPublicKey(publicKey);
-      await register(email, publicKeyPem, deviceName.trim());
-      showToast('Registration successful! You can now authenticate.', 'success');
-      setEmail('');
-      setDeviceName('');
+      const response = await register(email, publicKeyPem, deviceName.trim());
+      console.log('Registration response:', response);
+      
+      // Store the device ID along with the private key
+      if (response.device_id) {
+        console.log('Storing device ID:', response.device_id);
+        await savePrivateKey(privateKey, response.device_id);
+      } else {
+        console.log('No device ID in response, storing without device ID');
+        await savePrivateKey(privateKey);
+      }
+      
+      // SECURITY FIX: Only handle new user registration
+      if (response.message === 'User registered successfully. Please check your email for verification code.') {
+        // New user registration - requires email verification
+        setPendingRegistration({
+          email,
+          deviceName: deviceName.trim(),
+          privateKey,
+          deviceId: response.device_id
+        });
+        setShowEmailVerification(true);
+        setEmail('');
+        setDeviceName('');
+      } else {
+        // Unknown response
+        showToast?.('Registration completed. You can now authenticate.', 'success');
+        setEmail('');
+        setDeviceName('');
+      }
     } catch (err: any) {
-      const errorMessage = err?.message || err || 'Registration failed';
-      setError(errorMessage);
-      showToast('Registration failed: ' + errorMessage, 'error');
+      // SECURITY FIX: Handle specific error codes with user-friendly messages
+      if (err?.response?.data?.code === 'USER_ALREADY_EXISTS') {
+        const message = err.response.data.message || 'An account with this email already exists. Please use the authentication flow to sign in.';
+        setError(message);
+        showToast?.(message, 'error');
+      } else if (err?.response?.data?.code === 'EMAIL_NOT_VERIFIED') {
+        const message = err.response.data.message || 'Please verify your email address before authenticating.';
+        setError(message);
+        showToast?.(message, 'error');
+      } else {
+        const errorMessage = err?.message || err || 'Registration failed';
+        setError(errorMessage);
+        showToast?.('Registration failed: ' + errorMessage, 'error');
+      }
     } finally {
       setLoading(false);
     }
   };
+
+  if (showEmailVerification && pendingRegistration) {
+    return (
+      <EmailVerification
+        email={pendingRegistration.email}
+        onVerificationSuccess={handleEmailVerificationSuccess}
+        onCancel={handleEmailVerificationCancel}
+        showToast={showToast || (() => {})}
+        isRegistration={true}
+      />
+    );
+  }
 
   return (
     <section className="section" aria-labelledby="registration-title">
@@ -135,18 +232,38 @@ const Registration: React.FC<RegistrationProps> = ({ showToast }) => {
           <label htmlFor="register-device-name" className="form-label">
             Device Name <span aria-label="required" className="required">*</span>
           </label>
-          <input
-            id="register-device-name"
-            type="text"
-            placeholder="e.g., iPhone 14, Work Laptop, Home Desktop"
-            value={deviceName}
-            onChange={handleDeviceNameChange}
-            onBlur={() => validateDeviceName(deviceName)}
-            required
-            aria-describedby={deviceNameError ? "device-name-error" : "device-info"}
-            disabled={loading}
-            autoComplete="off"
-          />
+          
+          {!showCustomInput ? (
+            <select
+              id="register-device-name"
+              value={deviceName}
+              onChange={handleDeviceNameChange}
+              onBlur={() => validateDeviceName(deviceName)}
+              required
+              aria-describedby={deviceNameError ? "device-name-error" : "device-info"}
+              disabled={loading}
+            >
+              {deviceOptions.map((option, index) => (
+                <option key={index} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              id="register-device-name"
+              type="text"
+              placeholder="Enter custom device name"
+              value={deviceName}
+              onChange={handleDeviceNameChange}
+              onBlur={() => validateDeviceName(deviceName)}
+              required
+              aria-describedby={deviceNameError ? "device-name-error" : "device-info"}
+              disabled={loading}
+              autoComplete="off"
+            />
+          )}
+          
           {deviceNameError && (
             <div id="device-name-error" className="error-message" role="alert" aria-live="polite">
               {deviceNameError}

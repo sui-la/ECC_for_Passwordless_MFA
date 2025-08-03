@@ -32,16 +32,16 @@ export function detectDeviceInfo(): DeviceInfo {
     os = 'Linux';
   }
 
-  // Detect browser
+  // Detect browser (check Edge first since it contains Chrome in User-Agent)
   let browser = 'Unknown';
-  if (/Chrome/i.test(userAgent) && !/Edge/i.test(userAgent)) {
+  if (/Edg/i.test(userAgent)) {
+    browser = 'Edge';
+  } else if (/Chrome/i.test(userAgent)) {
     browser = 'Chrome';
   } else if (/Safari/i.test(userAgent) && !/Chrome/i.test(userAgent)) {
     browser = 'Safari';
   } else if (/Firefox/i.test(userAgent)) {
     browser = 'Firefox';
-  } else if (/Edge/i.test(userAgent)) {
-    browser = 'Edge';
   } else if (/Opera/i.test(userAgent)) {
     browser = 'Opera';
   }
@@ -116,4 +116,83 @@ export function getDeviceFingerprint(): string {
   const language = navigator.language;
   
   return `${deviceInfo.os}-${deviceInfo.browser}-${deviceInfo.deviceType}-${screenRes}-${timezone}-${language}`;
+}
+
+export function getCommonDeviceNames(): string[] {
+  const deviceInfo = detectDeviceInfo();
+  const { deviceType, os, browser } = deviceInfo;
+  
+  const commonNames: string[] = [];
+  
+  // Add detected device name first
+  commonNames.push(generateDeviceName(deviceInfo));
+  
+  // Add common variations based on device type
+  switch (deviceType) {
+    case 'desktop':
+      if (os === 'Windows') {
+        commonNames.push('Windows PC (Chrome)');
+        commonNames.push('Windows PC (Edge)');
+        commonNames.push('Windows PC (Firefox)');
+        commonNames.push('Windows Laptop (Chrome)');
+        commonNames.push('Windows Laptop (Edge)');
+        commonNames.push('Windows Laptop (Firefox)');
+        commonNames.push('Work Computer (Chrome)');
+        commonNames.push('Home Computer (Chrome)');
+      } else if (os === 'macOS') {
+        commonNames.push('Mac (Safari)');
+        commonNames.push('Mac (Chrome)');
+        commonNames.push('Mac (Firefox)');
+        commonNames.push('MacBook (Safari)');
+        commonNames.push('MacBook (Chrome)');
+        commonNames.push('MacBook (Firefox)');
+        commonNames.push('iMac (Safari)');
+        commonNames.push('iMac (Chrome)');
+      } else if (os === 'Linux') {
+        commonNames.push('Linux PC (Chrome)');
+        commonNames.push('Linux PC (Firefox)');
+        commonNames.push('Ubuntu PC (Chrome)');
+        commonNames.push('Ubuntu PC (Firefox)');
+      }
+      break;
+      
+    case 'mobile':
+      if (os === 'iOS') {
+        commonNames.push('iPhone (Safari)');
+        commonNames.push('iPhone (Chrome)');
+        commonNames.push('iPhone (Firefox)');
+        commonNames.push('iPhone (Edge)');
+      } else if (os === 'Android') {
+        commonNames.push('Android Phone (Chrome)');
+        commonNames.push('Android Phone (Firefox)');
+        commonNames.push('Android Phone (Edge)');
+        commonNames.push('Samsung Galaxy (Chrome)');
+        commonNames.push('Google Pixel (Chrome)');
+      }
+      break;
+      
+    case 'tablet':
+      if (os === 'iOS') {
+        commonNames.push('iPad (Safari)');
+        commonNames.push('iPad (Chrome)');
+        commonNames.push('iPad (Firefox)');
+        commonNames.push('iPad (Edge)');
+      } else if (os === 'Android') {
+        commonNames.push('Android Tablet (Chrome)');
+        commonNames.push('Android Tablet (Firefox)');
+        commonNames.push('Samsung Tablet (Chrome)');
+        commonNames.push('Google Tablet (Chrome)');
+      }
+      break;
+  }
+  
+  // Add generic options
+  commonNames.push('Personal Device');
+  commonNames.push('Work Device');
+  commonNames.push('Home Device');
+  commonNames.push('Mobile Device');
+  commonNames.push('Tablet Device');
+  
+  // Remove duplicates and return
+  return [...new Set(commonNames)];
 } 

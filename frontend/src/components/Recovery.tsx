@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { initiateRecovery, verifyRecoveryToken, completeRecovery } from '../services/api';
 import { generateKeyPair, exportPublicKey } from '../services/crypto';
+import { savePrivateKey } from '../services/storage';
 import { generateDeviceName, detectDeviceInfo } from '../utils/deviceDetection';
 
 interface RecoveryProps {
-  showToast: (message: string, type: 'success' | 'error' | 'info') => void;
+  showToast?: (message: string, type: 'success' | 'error' | 'info') => void;
+  onBack?: () => void;
 }
 
-const Recovery: React.FC<RecoveryProps> = ({ showToast }) => {
+const Recovery: React.FC<RecoveryProps> = ({ showToast, onBack }) => {
   const [step, setStep] = useState<'initiate' | 'verify' | 'complete'>('initiate');
   const [email, setEmail] = useState('');
   const [recoveryToken, setRecoveryToken] = useState('');
@@ -56,11 +58,11 @@ const Recovery: React.FC<RecoveryProps> = ({ showToast }) => {
     setLoading(true);
     try {
       await initiateRecovery(email);
-      showToast('Recovery email sent! Check your inbox for the recovery link.', 'success');
+      showToast?.('Recovery email sent! Check your inbox for the recovery link.', 'success');
       setEmail('');
     } catch (err: any) {
       setError(err.message || 'Failed to initiate recovery');
-      showToast(err.message || 'Failed to initiate recovery', 'error');
+      showToast?.(err.message || 'Failed to initiate recovery', 'error');
     } finally {
       setLoading(false);
     }
@@ -74,7 +76,7 @@ const Recovery: React.FC<RecoveryProps> = ({ showToast }) => {
       setStep('complete');
     } catch (err: any) {
       setError(err.message || 'Invalid or expired recovery token');
-      showToast(err.message || 'Invalid or expired recovery token', 'error');
+      showToast?.(err.message || 'Invalid or expired recovery token', 'error');
       setStep('initiate');
     } finally {
       setLoading(false);
@@ -97,15 +99,23 @@ const Recovery: React.FC<RecoveryProps> = ({ showToast }) => {
       const publicKeyPem = await exportPublicKey(keyPair.publicKey);
       
       // Complete recovery
-      await completeRecovery(recoveryToken, publicKeyPem, deviceName.trim());
+      const response = await completeRecovery(recoveryToken, publicKeyPem, deviceName.trim());
       
-      showToast('Account recovery completed successfully! You can now authenticate with your new device.', 'success');
+      // Save the private key locally for authentication
+      if (response && response.device_id) {
+        await savePrivateKey(keyPair.privateKey, response.device_id);
+      } else {
+        await savePrivateKey(keyPair.privateKey);
+      }
       
-      // Redirect to authentication
-      window.location.href = '/';
+      showToast?.('Account recovery completed successfully! You can now authenticate with your new device.', 'success');
+      setStep('initiate');
+      setEmail('');
+      setDeviceName('');
+      setRecoveryToken('');
     } catch (err: any) {
       setError(err.message || 'Failed to complete recovery');
-      showToast(err.message || 'Failed to complete recovery', 'error');
+      showToast?.(err.message || 'Failed to complete recovery', 'error');
     } finally {
       setLoading(false);
     }
@@ -144,6 +154,27 @@ const Recovery: React.FC<RecoveryProps> = ({ showToast }) => {
       maxWidth: '100%',
       color: 'var(--color-main)'
     }}>
+      {/* Back Button */}
+      <button
+        onClick={onBack}
+        style={{
+          background: 'none',
+          border: '1px solid var(--color-border)',
+          color: 'var(--color-main)',
+          borderRadius: 6,
+          padding: '8px 16px',
+          fontSize: '0.9em',
+          cursor: 'pointer',
+          marginBottom: '1rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
+        }}
+        aria-label="Go back to main page"
+      >
+        ← Back
+      </button>
+
       <h2 style={{ 
         marginBottom: '1rem',
         fontSize: '1.8em',

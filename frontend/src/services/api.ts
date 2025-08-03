@@ -1,6 +1,6 @@
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
-export async function register(email: string, publicKeyPem: string, deviceName?: string) {
+export async function register(email: string, publicKeyPem: string, deviceName?: string): Promise<{ message: string; device_id?: string }> {
   const res = await fetch(`${API_URL}/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -24,15 +24,30 @@ export async function getChallenge(email: string): Promise<{ nonce: string }> {
   return res.json();
 }
 
-export async function verify(email: string, signature: string): Promise<{ token: string; server_ecdh_public_key: string }> {
+export async function verify(email: string, signature: string, deviceId?: string): Promise<{ token: string; server_ecdh_public_key: string } | { requires_verification: true; error: string; message: string }> {
+  const body: any = { email, signature };
+  if (deviceId) {
+    body.device_id = deviceId;
+  }
   
   const res = await fetch(`${API_URL}/auth/verify`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, signature })
+    body: JSON.stringify(body)
   });
-  if (!res.ok) throw new Error((await res.json()).error || 'Verification failed');
-  return res.json();
+  
+  const responseData = await res.json();
+  
+  // Handle email verification requirement specially
+  if (res.status === 403 && responseData.requires_verification) {
+    return responseData;
+  }
+  
+  if (!res.ok) {
+    throw new Error(responseData.error || 'Verification failed');
+  }
+  
+  return responseData;
 }
 
 export async function getProfile(): Promise<{ email: string; last_login: string | null; created_at: string | null }> {
@@ -78,7 +93,84 @@ export async function sendSecureData(ciphertext: string, iv: string): Promise<{ 
   });
   if (!res.ok) throw new Error((await res.json()).error || 'Secure data exchange failed');
   return res.json();
-} 
+}
+
+export async function sendSecureMessage(recipientEmail: string, encryptedMessage: string, messageIv: string, messageId: string): Promise<{ message: string, message_id: string }> {
+  const token = localStorage.getItem('jwt');
+  if (!token) throw new Error('No authentication token found');
+  const res = await fetch(`${API_URL}/session/send-secure-message`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({ 
+      recipient_email: recipientEmail, 
+      encrypted_message: encryptedMessage, 
+      message_iv: messageIv,
+      message_id: messageId
+    })
+  });
+  if (!res.ok) throw new Error((await res.json()).error || 'Failed to send secure message');
+  return res.json();
+}
+
+export async function receiveSecureMessages(): Promise<{ messages: Array<{
+  message_id: string;
+  sender_email: string;
+  encrypted_message: string;
+  message_iv: string;
+  timestamp: string;
+  session_id: string;
+}>, count: number }> {
+  const token = localStorage.getItem('jwt');
+  if (!token) throw new Error('No authentication token found');
+  const res = await fetch(`${API_URL}/session/receive-secure-messages`, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${token}`
+    }
+  });
+  if (!res.ok) throw new Error((await res.json()).error || 'Failed to receive secure messages');
+  return res.json();
+}
+
+export async function deleteSecureMessage(messageId: string): Promise<{ message: string }> {
+  const token = localStorage.getItem('jwt');
+  if (!token) throw new Error('No authentication token found');
+  const res = await fetch(`${API_URL}/session/delete-secure-message/${messageId}`, {
+    method: 'DELETE',
+    headers: {
+      'Authorization': `Bearer ${token}`
+    }
+  });
+  if (!res.ok) throw new Error((await res.json()).error || 'Failed to delete secure message');
+  return res.json();
+}
+
+export async function updateMessageEncryption(
+  messageId: string, 
+  encryptedMessage: string, 
+  messageIv: string, 
+  newMessageId: string
+): Promise<{ message: string; new_message_id: string }> {
+  const token = localStorage.getItem('jwt');
+  if (!token) throw new Error('No authentication token found');
+  const res = await fetch(`${API_URL}/session/update-message-encryption/${messageId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({
+      encrypted_message: encryptedMessage,
+      message_iv: messageIv,
+      new_message_id: newMessageId
+    })
+  });
+  if (!res.ok) throw new Error((await res.json()).error || 'Failed to update message encryption');
+  return res.json();
+}
 
 export async function getDevices(): Promise<{ devices: Array<{
   device_id: string;
@@ -186,7 +278,7 @@ export async function completeRecovery(
   recoveryToken: string, 
   publicKeyPem: string, 
   deviceName: string
-): Promise<{ message: string }> {
+): Promise<{ message: string; device_id: string }> {
   const res = await fetch(`${API_URL}/recovery/complete`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -200,22 +292,27 @@ export async function completeRecovery(
   return res.json();
 }
 
-export async function generateBackupKey(): Promise<{
-  private_key_pem: string;
-  public_key_pem: string;
-  backup_id: string;
-  created_at: string;
-}> {
-  const token = localStorage.getItem('jwt');
-  if (!token) throw new Error('No authentication token found');
-  
-  const res = await fetch(`${API_URL}/backup/generate`, {
+export async function sendEmailVerification(email: string): Promise<{ message: string }> {
+  const res = await fetch(`${API_URL}/email/send-verification`, {
     method: 'POST',
-    headers: { 
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
-    }
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email })
   });
-  if (!res.ok) throw new Error((await res.json()).error || 'Failed to generate backup key');
+  if (!res.ok) throw new Error((await res.json()).error || 'Failed to send verification code');
   return res.json();
-} 
+}
+
+export async function verifyEmailCode(email: string, verificationCode: string): Promise<{ message: string }> {
+  const res = await fetch(`${API_URL}/email/verify-code`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ 
+      email, 
+      verification_code: verificationCode 
+    })
+  });
+  if (!res.ok) throw new Error((await res.json()).error || 'Failed to verify code');
+  return res.json();
+}
+
+ 

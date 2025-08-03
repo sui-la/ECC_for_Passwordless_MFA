@@ -3,7 +3,7 @@ from datetime import datetime
 
 def add_user(email, public_key, device_name="Unknown Device"):
     """Create a new user with their first device."""
-    user = User(email=email)
+    user = User(email=email, email_verified=False)  # Set email_verified to False by default
     db.session.add(user)
     db.session.flush()  # Get the user_id
     
@@ -88,4 +88,50 @@ def add_auth_log(user_id, device_id, event_type, ip_address, user_agent, success
     )
     db.session.add(log)
     db.session.commit()
-    return log 
+    return log
+
+def mark_user_email_verified(user_id):
+    """Mark a user's email as verified."""
+    user = User.query.get(user_id)
+    if user:
+        user.email_verified = True
+        db.session.commit()
+        return True
+    return False
+
+# Database management functions
+def clear_all_data():
+    """Delete all data from all tables while keeping the table structure."""
+    try:
+        # Delete all records from all tables
+        Session.query.delete()
+        AuthLog.query.delete()
+        Device.query.delete()
+        User.query.delete()
+        
+        # Commit the changes
+        db.session.commit()
+        return True
+    except Exception as e:
+        db.session.rollback()
+        raise e
+
+def reset_database():
+    """Drop all tables and recreate them (complete reset)."""
+    try:
+        # Drop all tables
+        db.drop_all()
+        # Create all tables
+        db.create_all()
+        return True
+    except Exception as e:
+        raise e
+
+def get_database_stats():
+    """Get statistics about the database."""
+    return {
+        'users': User.query.count(),
+        'devices': Device.query.count(),
+        'sessions': Session.query.count(),
+        'auth_logs': AuthLog.query.count()
+    } 

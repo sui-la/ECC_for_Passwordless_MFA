@@ -86,6 +86,43 @@ input[type="email"]:focus, input[type="text"]:focus {
   border: 1.5px solid #00c6ff;
 }
 
+/* Select dropdown styling for dark theme */
+select {
+  padding: 10px 14px;
+  border: 1.5px solid #3a506b;
+  border-radius: 8px;
+  font-size: 1em;
+  margin-right: 10px;
+  margin-bottom: 10px;
+  background: #232946;
+  color: #e3eafc;
+  outline: none;
+  transition: border 0.2s;
+  cursor: pointer;
+}
+
+select:focus {
+  border: 1.5px solid #00c6ff;
+}
+
+/* Style the dropdown options for dark theme */
+select option {
+  background: #232946;
+  color: #e3eafc;
+  padding: 8px 12px;
+}
+
+/* Hover effect for options */
+select option:hover {
+  background: #3a506b;
+}
+
+/* Selected option */
+select option:checked {
+  background: #00c6ff;
+  color: #232946;
+}
+
 button {
   padding: 10px 22px;
   background: linear-gradient(90deg, #00c6ff 0%, #0072ff 100%);
