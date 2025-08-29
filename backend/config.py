@@ -25,7 +25,7 @@ class Config:
     
     # Security Configuration
     JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY') or SECRET_KEY
-    JWT_ACCESS_TOKEN_EXPIRES = int(os.environ.get('JWT_ACCESS_TOKEN_EXPIRES', '300'))  # 5 minutes
+    JWT_ACCESS_TOKEN_EXPIRES = int(os.environ.get('JWT_ACCESS_TOKEN_EXPIRES', '300'))
     
     # Rate Limiting Configuration
     RATE_LIMIT_STORAGE_URL = REDIS_URL

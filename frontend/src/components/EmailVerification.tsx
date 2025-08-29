@@ -3,7 +3,7 @@ import { verifyEmailCode, sendEmailVerification } from '../services/api';
 
 interface EmailVerificationProps {
   email?: string;
-  onVerificationSuccess?: () => void;
+  onVerificationSuccess?: (authData?: { token: string; server_ecdh_public_key: string; session_id: string }) => void;
   onCancel?: () => void;
   showToast?: (message: string, type: 'success' | 'error' | 'info') => void;
   isRegistration?: boolean;
@@ -58,9 +58,26 @@ const EmailVerification: React.FC<EmailVerificationProps> = ({
         setError('Email is required for verification');
         return;
       }
-      await verifyEmailCode(email, verificationCode.trim());
-      showToast?.('Email verification successful!', 'success');
-      onVerificationSuccess?.();
+      const result = await verifyEmailCode(email, verificationCode.trim());
+      
+      if (isRegistration) {
+        // For registration, just show success message
+        showToast?.('Email verification successful!', 'success');
+        onVerificationSuccess?.();
+      } else {
+        // For authentication, handle automatic authentication
+        if (result.token && result.server_ecdh_public_key && result.session_id) {
+          showToast?.('Email verification and authentication successful!', 'success');
+          onVerificationSuccess?.({
+            token: result.token,
+            server_ecdh_public_key: result.server_ecdh_public_key,
+            session_id: result.session_id
+          });
+        } else {
+          showToast?.('Email verification successful!', 'success');
+          onVerificationSuccess?.();
+        }
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to verify code');
       showToast?.(err.message || 'Failed to verify code', 'error');

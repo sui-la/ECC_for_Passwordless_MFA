@@ -114,7 +114,8 @@ def clear_all_data():
         return True
     except Exception as e:
         db.session.rollback()
-        raise e
+        print(f"Error clearing database: {e}")
+        return False
 
 def reset_database():
     """Drop all tables and recreate them (complete reset)."""
@@ -134,4 +135,4 @@ def get_database_stats():
         'devices': Device.query.count(),
         'sessions': Session.query.count(),
         'auth_logs': AuthLog.query.count()
-    } 
+    }

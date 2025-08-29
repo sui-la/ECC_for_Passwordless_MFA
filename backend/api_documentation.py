@@ -49,10 +49,10 @@ api = Api(
     },
     security='Bearer',
     contact='ECC MFA Team',
-    contact_email='support@ecc-mfa.com',
-    contact_url='https://github.com/ecc-mfa',
-    license='MIT',
-    license_url='https://opensource.org/licenses/MIT'
+    contact_email='eccmfa.com',
+    contact_url='https://github.com/sui-la/ECC_for_Passwordless_MFA',
+    serve_challenge_on_401=False,
+    validate=True
 )
 
 # Create namespaces for different API sections
@@ -442,17 +442,13 @@ def generate_api_spec() -> Dict[str, Any]:
             'description': 'Secure passwordless authentication using ECC',
             'contact': {
                 'name': 'ECC MFA Team',
-                'email': 'support@ecc-mfa.com'
+                'email': 'eccmfa@gmail.com'
             }
         },
         'servers': [
             {
                 'url': 'http://localhost:5000',
                 'description': 'Development server'
-            },
-            {
-                'url': 'https://api.ecc-mfa.com',
-                'description': 'Production server'
             }
         ],
         'components': {
@@ -494,4 +490,4 @@ def get_api_endpoints() -> Dict[str, Any]:
 
 def create_api_documentation():
     """Initialize API documentation."""
-    return api 
+    return api

@@ -28,6 +28,10 @@ class RequestLoggingMiddleware:
     
     def before_request(self):
         """Log request details before processing."""
+        # Skip logging for static file requests
+        if request.path.startswith('/swaggerui/'):
+            return
+        
         # Generate request ID
         g.request_id = self._generate_request_id()
         g.start_time = time.time()
@@ -60,6 +64,10 @@ class RequestLoggingMiddleware:
     
     def after_request(self, response: Response) -> Response:
         """Log response details after processing."""
+        # Skip logging for static file requests
+        if request.path.startswith('/swaggerui/'):
+            return response
+        
         if hasattr(g, 'start_time'):
             response_time = time.time() - g.start_time
             
@@ -73,7 +81,7 @@ class RequestLoggingMiddleware:
                 ip_address=g.request_info['ip_address'],
                 user_agent=g.request_info['user_agent'],
                 content_length=g.request_info['content_length'],
-                response_size=len(response.get_data()) if response.get_data() else 0
+                response_size=len(response.get_data()) if response.get_data() and not response.direct_passthrough else 0
             )
             
             # Log response details
@@ -81,7 +89,7 @@ class RequestLoggingMiddleware:
                 'request_id': g.request_id,
                 'status_code': response.status_code,
                 'response_time': response_time,
-                'response_size': len(response.get_data()) if response.get_data() else 0
+                'response_size': len(response.get_data()) if response.get_data() and not response.direct_passthrough else 0
             })
             
             # Add request ID to response headers

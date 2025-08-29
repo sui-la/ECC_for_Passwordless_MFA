@@ -250,32 +250,6 @@ Authorization: Bearer <jwt_token>
 }
 ```
 
-### 2. Secure Data Exchange
-
-#### `POST /session/secure-data`
-Send encrypted data and receive encrypted response.
-
-**Headers:**
-```
-Authorization: Bearer <jwt_token>
-```
-
-**Request Body:**
-```json
-{
-  "ciphertext": "base64-encoded-encrypted-data",
-  "iv": "base64-encoded-iv"
-}
-```
-
-**Response (200 OK):**
-```json
-{
-  "ciphertext": "base64-encoded-encrypted-response",
-  "iv": "base64-encoded-response-iv"
-}
-```
-
 ## Secure Messaging
 
 ### 1. Send Secure Message

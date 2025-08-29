@@ -1,16 +1,20 @@
 """
-Comprehensive error handling system for ECC Passwordless MFA.
-Provides structured error responses, proper error codes, and logging.
+Unified Error Handler for ECC Passwordless MFA.
+Combines exception classes and enhanced error handling in one clean module.
 """
 
 import logging
 import traceback
+import uuid
+from datetime import datetime
 from typing import Dict, Any, Optional, Union
 from flask import jsonify, request
-from datetime import datetime
-import uuid
 
 logger = logging.getLogger(__name__)
+
+# ============================================================================
+# EXCEPTION CLASSES
+# ============================================================================
 
 class ECCError(Exception):
     """Base exception class for ECC MFA system."""
@@ -163,41 +167,71 @@ class SessionError(ECCError):
             details=details
         )
 
-# Error code mappings for common scenarios
-ERROR_CODES = {
-    # Authentication & Authorization
-    'INVALID_TOKEN': {'code': 'AUTHENTICATION_ERROR', 'status': 401, 'message': 'Invalid or expired authentication token'},
-    'MISSING_TOKEN': {'code': 'AUTHENTICATION_ERROR', 'status': 401, 'message': 'Authentication token is required'},
-    'INSUFFICIENT_PERMISSIONS': {'code': 'AUTHORIZATION_ERROR', 'status': 403, 'message': 'Insufficient permissions to access this resource'},
+# ============================================================================
+# ERROR CATEGORIES AND SEVERITY
+# ============================================================================
+
+class ErrorCategory:
+    """Error categories for better organization."""
+    AUTHENTICATION = "authentication"
+    AUTHORIZATION = "authorization"
+    VALIDATION = "validation"
+    DATABASE = "database"
+    CRYPTO = "cryptographic"
+    NETWORK = "network"
+    SYSTEM = "system"
+    RATE_LIMIT = "rate_limit"
+    EMAIL = "email"
+    SESSION = "session"
+
+class ErrorSeverity:
+    """Error severity levels."""
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
+
+# ============================================================================
+# USER-FRIENDLY MESSAGES
+# ============================================================================
+
+USER_FRIENDLY_MESSAGES = {
+    # Authentication errors
+    "invalid_credentials": "The provided credentials are incorrect. Please try again.",
+    "token_expired": "Your session has expired. Please sign in again.",
+    "token_invalid": "Invalid authentication token. Please sign in again.",
+    "email_not_verified": "Please verify your email address before signing in.",
+    "device_not_found": "The specified device was not found.",
+    "signature_verification_failed": "Authentication failed. Please try again.",
     
-    # Validation
-    'MISSING_REQUIRED_FIELD': {'code': 'VALIDATION_ERROR', 'status': 400, 'message': 'Required field is missing'},
-    'INVALID_EMAIL_FORMAT': {'code': 'VALIDATION_ERROR', 'status': 400, 'message': 'Invalid email format'},
-    'INVALID_PUBLIC_KEY': {'code': 'VALIDATION_ERROR', 'status': 400, 'message': 'Invalid public key format'},
-    'INVALID_SIGNATURE': {'code': 'VALIDATION_ERROR', 'status': 400, 'message': 'Invalid signature format'},
+    # Validation errors
+    "invalid_email": "Please enter a valid email address.",
+    "invalid_public_key": "The provided public key is invalid.",
+    "invalid_signature": "The provided signature is invalid.",
+    "missing_required_field": "Please fill in all required fields.",
+    "email_already_exists": "An account with this email already exists.",
     
-    # Resources
-    'USER_NOT_FOUND': {'code': 'NOT_FOUND', 'status': 404, 'message': 'User not found'},
-    'DEVICE_NOT_FOUND': {'code': 'NOT_FOUND', 'status': 404, 'message': 'Device not found'},
-    'SESSION_NOT_FOUND': {'code': 'NOT_FOUND', 'status': 404, 'message': 'Session not found'},
-    'MESSAGE_NOT_FOUND': {'code': 'NOT_FOUND', 'status': 404, 'message': 'Message not found'},
+    # Rate limiting
+    "rate_limit_exceeded": "Too many attempts. Please wait a moment before trying again.",
+    "auth_rate_limit": "Too many authentication attempts. Please wait before trying again.",
+    "registration_rate_limit": "Too many registration attempts. Please wait before trying again.",
     
-    # Business Logic
-    'USER_ALREADY_EXISTS': {'code': 'VALIDATION_ERROR', 'status': 409, 'message': 'User already exists'},
-    'DEVICE_ALREADY_REGISTERED': {'code': 'VALIDATION_ERROR', 'status': 409, 'message': 'Device already registered'},
-    'EMAIL_NOT_VERIFIED': {'code': 'AUTHORIZATION_ERROR', 'status': 403, 'message': 'Email address not verified'},
-    'INVALID_VERIFICATION_CODE': {'code': 'VALIDATION_ERROR', 'status': 400, 'message': 'Invalid verification code'},
-    'VERIFICATION_CODE_EXPIRED': {'code': 'VALIDATION_ERROR', 'status': 400, 'message': 'Verification code has expired'},
+    # System errors
+    "database_error": "A system error occurred. Please try again later.",
+    "crypto_error": "A security error occurred. Please try again.",
+    "email_error": "Unable to send email. Please try again later.",
+    "session_error": "Session error. Please sign in again.",
     
-    # Rate Limiting
-    'RATE_LIMIT_EXCEEDED': {'code': 'RATE_LIMIT_EXCEEDED', 'status': 429, 'message': 'Too many requests. Please try again later'},
-    
-    # System Errors
-    'INTERNAL_SERVER_ERROR': {'code': 'SYSTEM_ERROR', 'status': 500, 'message': 'Internal server error occurred'},
-    'DATABASE_CONNECTION_ERROR': {'code': 'DATABASE_ERROR', 'status': 500, 'message': 'Database connection error'},
-    'REDIS_CONNECTION_ERROR': {'code': 'SYSTEM_ERROR', 'status': 500, 'message': 'Cache connection error'},
-    'EMAIL_SEND_ERROR': {'code': 'EMAIL_ERROR', 'status': 500, 'message': 'Failed to send email'},
+    # Generic errors
+    "internal_error": "An unexpected error occurred. Please try again later.",
+    "service_unavailable": "Service temporarily unavailable. Please try again later.",
+    "not_found": "The requested resource was not found.",
+    "forbidden": "You don't have permission to access this resource.",
 }
+
+# ============================================================================
+# ERROR HANDLING FUNCTIONS
+# ============================================================================
 
 def create_error_response(error: ECCError, include_details: bool = False) -> Dict[str, Any]:
     """
@@ -224,72 +258,125 @@ def create_error_response(error: ECCError, include_details: bool = False) -> Dic
     return response
 
 def handle_validation_error(error: ValidationError) -> tuple:
-    """Handle validation errors with structured response."""
-    response = create_error_response(error, include_details=True)
-    logger.warning(f"Validation error: {error.message} - {error.details}")
-    return jsonify(response), error.status_code
-
-def handle_authentication_error(error: AuthenticationError) -> tuple:
-    """Handle authentication errors with structured response."""
-    response = create_error_response(error)
-    logger.warning(f"Authentication error: {error.message} - {error.details}")
-    return jsonify(response), error.status_code
-
-def handle_authorization_error(error: AuthorizationError) -> tuple:
-    """Handle authorization errors with structured response."""
-    response = create_error_response(error)
-    logger.warning(f"Authorization error: {error.message} - {error.details}")
-    return jsonify(response), error.status_code
-
-def handle_not_found_error(error: NotFoundError) -> tuple:
-    """Handle not found errors with structured response."""
-    response = create_error_response(error, include_details=True)
-    logger.info(f"Resource not found: {error.message} - {error.details}")
-    return jsonify(response), error.status_code
-
-def handle_rate_limit_error(error: RateLimitError) -> tuple:
-    """Handle rate limit errors with structured response."""
-    response = create_error_response(error, include_details=True)
-    logger.warning(f"Rate limit exceeded: {error.message} - {error.details}")
-    return jsonify(response), error.status_code
-
-def handle_system_error(error: ECCError) -> tuple:
-    """Handle system errors with structured response."""
-    # Don't expose internal details to users
-    user_message = "An internal error occurred. Please try again later."
-    if error.user_friendly:
-        user_message = error.message
+    """Handle validation errors with enhanced response."""
+    user_message = USER_FRIENDLY_MESSAGES.get(error.message, "Please check your input and try again.")
     
     response = {
         'error': True,
         'message': user_message,
         'code': error.error_code,
         'timestamp': error.timestamp,
-        'request_id': error.request_id
+        'request_id': error.request_id,
+        'category': ErrorCategory.VALIDATION,
+        'severity': ErrorSeverity.LOW
     }
     
-    # Log full error details for debugging
-    logger.error(f"System error: {error.message} - {error.details} - Traceback: {traceback.format_exc()}")
+    if error.details:
+        response['details'] = error.details
     
+    logger.warning(f"Validation error: {error.message} - {error.details}")
     return jsonify(response), error.status_code
 
-def handle_generic_exception(exception: Exception) -> tuple:
-    """Handle generic exceptions with structured response."""
-    error_id = str(uuid.uuid4())
-    timestamp = datetime.utcnow().isoformat()
-    
-    # Log the full exception for debugging
-    logger.error(f"Unhandled exception (ID: {error_id}): {str(exception)} - Traceback: {traceback.format_exc()}")
+def handle_authentication_error(error: AuthenticationError) -> tuple:
+    """Handle authentication errors with enhanced response."""
+    user_message = USER_FRIENDLY_MESSAGES.get(error.message, "Authentication failed. Please try again.")
     
     response = {
         'error': True,
-        'message': 'An unexpected error occurred. Please try again later.',
-        'code': 'INTERNAL_SERVER_ERROR',
-        'timestamp': timestamp,
-        'request_id': error_id
+        'message': user_message,
+        'code': error.error_code,
+        'timestamp': error.timestamp,
+        'request_id': error.request_id,
+        'category': ErrorCategory.AUTHENTICATION,
+        'severity': ErrorSeverity.MEDIUM
     }
     
+    logger.warning(f"Authentication error: {error.message} - {error.details}")
+    return jsonify(response), error.status_code
+
+def handle_authorization_error(error: AuthorizationError) -> tuple:
+    """Handle authorization errors with enhanced response."""
+    user_message = USER_FRIENDLY_MESSAGES.get(error.message, "You don't have permission to perform this action.")
+    
+    response = {
+        'error': True,
+        'message': user_message,
+        'code': error.error_code,
+        'timestamp': error.timestamp,
+        'request_id': error.request_id,
+        'category': ErrorCategory.AUTHORIZATION,
+        'severity': ErrorSeverity.CRITICAL
+    }
+    
+    logger.warning(f"Authorization error: {error.message} - {error.details}")
+    return jsonify(response), error.status_code
+
+def handle_not_found_error(error: NotFoundError) -> tuple:
+    """Handle not found errors with enhanced response."""
+    user_message = USER_FRIENDLY_MESSAGES.get(error.message, "The requested resource was not found.")
+    
+    response = {
+        'error': True,
+        'message': user_message,
+        'code': error.error_code,
+        'timestamp': error.timestamp,
+        'request_id': error.request_id,
+        'category': ErrorCategory.SYSTEM,
+        'severity': ErrorSeverity.LOW
+    }
+    
+    if error.details:
+        response['details'] = error.details
+    
+    logger.info(f"Resource not found: {error.message} - {error.details}")
+    return jsonify(response), error.status_code
+
+def handle_rate_limit_error(error: RateLimitError) -> tuple:
+    """Handle rate limit errors with enhanced response."""
+    user_message = USER_FRIENDLY_MESSAGES.get(error.message, "Too many requests. Please wait before trying again.")
+    
+    response = {
+        'error': True,
+        'message': user_message,
+        'code': error.error_code,
+        'timestamp': error.timestamp,
+        'request_id': error.request_id,
+        'category': ErrorCategory.RATE_LIMIT,
+        'severity': ErrorSeverity.MEDIUM
+    }
+    
+    if error.details:
+        response['details'] = error.details
+    
+    logger.warning(f"Rate limit exceeded: {error.message} - {error.details}")
+    return jsonify(response), error.status_code
+
+def handle_generic_exception(error: Exception) -> tuple:
+    """Handle generic exceptions with enhanced response."""
+    error_id = str(uuid.uuid4())
+    timestamp = datetime.utcnow().isoformat()
+    
+    # Don't expose internal details to users
+    user_message = "An unexpected error occurred. Please try again later."
+    
+    response = {
+        'error': True,
+        'message': user_message,
+        'code': 'INTERNAL_SERVER_ERROR',
+        'timestamp': timestamp,
+        'request_id': error_id,
+        'category': ErrorCategory.SYSTEM,
+        'severity': ErrorSeverity.HIGH
+    }
+    
+    # Log the full exception for debugging
+    logger.error(f"Unhandled exception (ID: {error_id}): {str(error)} - Traceback: {traceback.format_exc()}")
+    
     return jsonify(response), 500
+
+# ============================================================================
+# UTILITY FUNCTIONS
+# ============================================================================
 
 def log_request_error(request_info: Dict[str, Any], error: ECCError):
     """Log request error with context."""
@@ -322,7 +409,10 @@ def get_request_info() -> Dict[str, Any]:
         'headers': dict(request.headers)
     }
 
-# Decorator for error handling
+# ============================================================================
+# DECORATOR FOR ERROR HANDLING
+# ============================================================================
+
 def handle_errors(f):
     """Decorator to handle errors in route functions."""
     from functools import wraps
@@ -346,7 +436,7 @@ def handle_errors(f):
             elif isinstance(e, RateLimitError):
                 return handle_rate_limit_error(e)
             else:
-                return handle_system_error(e)
+                return handle_generic_exception(e)
         except Exception as e:
             request_info = get_request_info()
             logger.error(f"Unhandled exception in {f.__name__}: {str(e)}")
@@ -354,12 +444,15 @@ def handle_errors(f):
     
     return decorated_function
 
-# Error response helpers
+# ============================================================================
+# QUICK ERROR RESPONSE HELPERS
+# ============================================================================
+
 def error_response(message: str, error_code: str, status_code: int = 400, 
                   details: Optional[Dict[str, Any]] = None) -> tuple:
     """Create a quick error response."""
     error = ECCError(message, error_code, status_code, details)
-    return handle_system_error(error)
+    return handle_generic_exception(error)
 
 def validation_error(message: str, field: Optional[str] = None, value: Optional[str] = None) -> tuple:
     """Create a validation error response."""
@@ -380,4 +473,4 @@ def authentication_error(message: str, auth_type: str = 'general') -> tuple:
 def authorization_error(message: str, resource: Optional[str] = None) -> tuple:
     """Create an authorization error response."""
     error = AuthorizationError(message, resource)
-    return handle_authorization_error(error) 
+    return handle_authorization_error(error)

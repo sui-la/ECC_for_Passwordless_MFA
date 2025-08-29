@@ -48,115 +48,148 @@ const Authentication: React.FC<Props> = ({ onAuth, showToast }) => {
     }
   };
 
-  const handleEmailVerificationSuccess = async () => {
+  const handleEmailVerificationSuccess = async (authData?: { token: string; server_ecdh_public_key: string; session_id: string }) => {
     if (!pendingAuthentication) return;
     
     try {
-      // Add a small delay to ensure Redis has propagated the email verification status
-      console.log('⏳ Waiting for email verification to propagate...');
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Get a fresh challenge and create a new signature after email verification
-      const challengeResp = await getChallenge(pendingAuthentication.email);
-      const nonce = challengeResp.nonce;
-      if (!nonce) throw new Error('No challenge received');
-      
-      const privateKey = await loadPrivateKey();
-      if (!privateKey) throw new Error('No private key found. Please register first.');
-      
-      const signatureBase64 = await signMessage(privateKey, nonce);
-      
-      // Get the current device ID instead of using the stored one
-      const currentDeviceId = await getDeviceId();
-      console.log('Using current device ID for verification:', currentDeviceId);
-      
-      // Try authentication with retry mechanism
-      let verifyResp: any;
-      let retryCount = 0;
-      const maxRetries = 3;
-      
-      while (retryCount < maxRetries) {
-        try {
-          console.log(`🔄 Authentication attempt ${retryCount + 1}/${maxRetries}`);
-          
-          // Now verify with the fresh signature and current device ID
-          verifyResp = await verify(
-            pendingAuthentication.email, 
-            signatureBase64, 
-            currentDeviceId || undefined
-          );
-          
-          console.log('🔍 Email verification success - verify response:', verifyResp);
-          console.log('🔍 Response type:', typeof verifyResp);
-          console.log('🔍 Response keys:', Object.keys(verifyResp));
-          
-          // Check if we got a verification requirement again (shouldn't happen after verification)
-          if ('requires_verification' in verifyResp && verifyResp.requires_verification) {
-            console.log('❌ Unexpected verification requirement after email verification');
-            throw new Error('Unexpected verification requirement after email verification');
-          }
-          
-          // Check if we have the expected success response
-          if (!('token' in verifyResp)) {
-            console.log('❌ No token in response. Full response:', verifyResp);
+      if (authData) {
+        // Automatic authentication was successful - handle the response
+        console.log('✅ Email verification successful, please reauthenticate one more time');
+        
+        const { token, server_ecdh_public_key } = authData;
+        
+        if (typeof token !== "string" || !token.trim()) {
+          throw new Error('No authentication token received');
+        }
+        if (!server_ecdh_public_key) {
+          throw new Error('No server ECDH public key received');
+        }
+        
+        // Complete ECDH key exchange
+        const clientECDHKeyPair = await generateECDHKeyPair();
+        const clientECDHPublicKeyPem = await exportECDHPublicKey(clientECDHKeyPair.publicKey);
+        await sendECDHPublicKey(clientECDHPublicKeyPem);
+        
+        const serverECDHPublicKey = await importECDHPublicKey(server_ecdh_public_key);
+        const sharedSecret = await deriveSharedSecret(clientECDHKeyPair.privateKey, serverECDHPublicKey);
+        saveSessionSharedSecret(sharedSecret);
+        
+        // Store JWT and complete authentication
+        localStorage.setItem('jwt', token);
+        onAuth?.(token);
+        showToast?.('Authentication successful! Welcome back.', 'success');
+        
+        setShowEmailVerification(false);
+        setPendingAuthentication(null);
+      } else {
+        // Fallback to manual authentication (for backward compatibility)
+        console.log('🔄 Falling back to manual authentication after email verification');
+        
+        // Add a small delay to ensure Redis has propagated the email verification status
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Get a fresh challenge and create a new signature after email verification
+        const challengeResp = await getChallenge(pendingAuthentication.email);
+        const nonce = challengeResp.nonce;
+        if (!nonce) throw new Error('No challenge received');
+        
+        const privateKey = await loadPrivateKey();
+        if (!privateKey) throw new Error('No private key found. Please register first.');
+        
+        const signatureBase64 = await signMessage(privateKey, nonce);
+        
+        // Get the current device ID instead of using the stored one
+        const currentDeviceId = await getDeviceId();
+        console.log('Using current device ID for verification:', currentDeviceId);
+        
+        // Try authentication with retry mechanism
+        let verifyResp: any;
+        let retryCount = 0;
+        const maxRetries = 3;
+        
+        while (retryCount < maxRetries) {
+          try {
+            console.log(`🔄 Authentication attempt ${retryCount + 1}/${maxRetries}`);
+            
+            // Now verify with the fresh signature and current device ID
+            verifyResp = await verify(
+              pendingAuthentication.email, 
+              signatureBase64, 
+              currentDeviceId || undefined
+            );
+            
+            console.log('🔍 Email verification success - verify response:', verifyResp);
+            console.log('🔍 Response type:', typeof verifyResp);
+            console.log('🔍 Response keys:', Object.keys(verifyResp));
+            
+            // Check if we got a verification requirement again (shouldn't happen after verification)
+            if ('requires_verification' in verifyResp && verifyResp.requires_verification) {
+              console.log('❌ Unexpected verification requirement after email verification');
+              throw new Error('Unexpected verification requirement after email verification');
+            }
+            
+            // Check if we have the expected success response
+            if (!('token' in verifyResp)) {
+              console.log('❌ No token in response. Full response:', verifyResp);
+              if (retryCount < maxRetries - 1) {
+                console.log('⏳ Retrying in 2 seconds...');
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                retryCount++;
+                continue;
+              }
+              throw new Error('No authentication token received');
+            }
+            
+            // Success! Break out of retry loop
+            break;
+            
+          } catch (error) {
+            console.log(`❌ Authentication attempt ${retryCount + 1} failed:`, error);
             if (retryCount < maxRetries - 1) {
               console.log('⏳ Retrying in 2 seconds...');
               await new Promise(resolve => setTimeout(resolve, 2000));
               retryCount++;
-              continue;
+            } else {
+              throw error;
             }
-            throw new Error('No authentication token received');
-          }
-          
-          // Success! Break out of retry loop
-          break;
-          
-        } catch (error) {
-          console.log(`❌ Authentication attempt ${retryCount + 1} failed:`, error);
-          if (retryCount < maxRetries - 1) {
-            console.log('⏳ Retrying in 2 seconds...');
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            retryCount++;
-          } else {
-            throw error;
           }
         }
+        
+        // Type guard to ensure we have the success response
+        if (!verifyResp || !('token' in verifyResp)) {
+          throw new Error('No authentication token received after retries');
+        }
+        
+        const { token, server_ecdh_public_key } = verifyResp;
+        console.log('✅ Token received:', token ? 'Present' : 'Missing');
+        console.log('✅ Server ECDH public key received:', server_ecdh_public_key ? 'Present' : 'Missing');
+        
+        if (typeof token !== "string" || !token.trim()) {
+          console.log('❌ Token is invalid:', token);
+          throw new Error('No authentication token received');
+        }
+        if (!server_ecdh_public_key) {
+          console.log('❌ Server ECDH public key is missing');
+          throw new Error('No server ECDH public key received');
+        }
+        
+        // Complete ECDH key exchange
+        const clientECDHKeyPair = await generateECDHKeyPair();
+        const clientECDHPublicKeyPem = await exportECDHPublicKey(clientECDHKeyPair.publicKey);
+        await sendECDHPublicKey(clientECDHPublicKeyPem);
+        
+        const serverECDHPublicKey = await importECDHPublicKey(server_ecdh_public_key);
+        const sharedSecret = await deriveSharedSecret(clientECDHKeyPair.privateKey, serverECDHPublicKey);
+        saveSessionSharedSecret(sharedSecret);
+        
+        // Store JWT and complete authentication
+        localStorage.setItem('jwt', token);
+        onAuth?.(token);
+        showToast?.('Authentication successful! Welcome back.', 'success');
+        
+        setShowEmailVerification(false);
+        setPendingAuthentication(null);
       }
-      
-      // Type guard to ensure we have the success response
-      if (!verifyResp || !('token' in verifyResp)) {
-        throw new Error('No authentication token received after retries');
-      }
-      
-      const { token, server_ecdh_public_key } = verifyResp;
-      console.log('✅ Token received:', token ? 'Present' : 'Missing');
-      console.log('✅ Server ECDH public key received:', server_ecdh_public_key ? 'Present' : 'Missing');
-      
-      if (typeof token !== "string" || !token.trim()) {
-        console.log('❌ Token is invalid:', token);
-        throw new Error('No authentication token received');
-      }
-      if (!server_ecdh_public_key) {
-        console.log('❌ Server ECDH public key is missing');
-        throw new Error('No server ECDH public key received');
-      }
-      
-      // Complete ECDH key exchange
-      const clientECDHKeyPair = await generateECDHKeyPair();
-      const clientECDHPublicKeyPem = await exportECDHPublicKey(clientECDHKeyPair.publicKey);
-      await sendECDHPublicKey(clientECDHPublicKeyPem);
-      
-      const serverECDHPublicKey = await importECDHPublicKey(server_ecdh_public_key);
-      const sharedSecret = await deriveSharedSecret(clientECDHKeyPair.privateKey, serverECDHPublicKey);
-      saveSessionSharedSecret(sharedSecret);
-      
-      // Store JWT and complete authentication
-      localStorage.setItem('jwt', token);
-      onAuth?.(token);
-      showToast?.('Authentication successful! Welcome back.', 'success');
-      
-      setShowEmailVerification(false);
-      setPendingAuthentication(null);
     } catch (err: any) {
       console.error('Authentication error after email verification:', err);
       showToast?.('Authentication failed after verification: ' + (err?.message || err), 'error');
@@ -301,10 +334,6 @@ const Authentication: React.FC<Props> = ({ onAuth, showToast }) => {
   return (
     <section className="section" aria-labelledby="authentication-title">
       <h2 id="authentication-title">Authenticate</h2>
-      <p className="section-description">
-        Sign in to your account using your email address. Your device will use your stored private key to prove your identity.
-      </p>
-      
       <form onSubmit={handleAuthenticate} noValidate aria-describedby={error ? "authentication-error" : undefined}>
         <div className="form-group">
           <label htmlFor="auth-email" className="form-label">
@@ -351,16 +380,7 @@ const Authentication: React.FC<Props> = ({ onAuth, showToast }) => {
         </button>
       </form>
 
-      <div className="info-box" role="note" aria-label="Authentication information">
-        <h3>How authentication works</h3>
-        <ol>
-          <li>Enter your registered email address</li>
-          <li>Our server sends a unique challenge to your device</li>
-          <li>Your device signs the challenge with your private key</li>
-          <li>The server verifies your signature using your public key</li>
-          <li>You're granted access without ever sending a password</li>
-        </ol>
-      </div>
+      
     </section>
   );
 };

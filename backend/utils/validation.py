@@ -15,7 +15,7 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-from .error_handler import ValidationError
+from .unified_error_handler import ValidationError
 
 class InputValidator:
     """Comprehensive input validation for the ECC MFA system."""
@@ -29,7 +29,7 @@ class InputValidator:
     # Maximum lengths
     MAX_EMAIL_LENGTH = 255
     MAX_DEVICE_NAME_LENGTH = 100
-    MAX_PUBLIC_KEY_LENGTH = 10000  # PEM keys can be quite long
+    MAX_PUBLIC_KEY_LENGTH = 10000
     MAX_SIGNATURE_LENGTH = 1000
     MAX_NONCE_LENGTH = 100
     MAX_SESSION_ID_LENGTH = 36
@@ -326,7 +326,7 @@ class InputValidator:
             validated_data[field] = data[field]
         
         # Validate optional fields
-        if optional_fields:
+        if optional_fields and isinstance(optional_fields, dict):
             for field, validator in optional_fields.items():
                 if field in data and data[field] is not None:
                     try:
@@ -348,6 +348,10 @@ def validate_request_schema(required_fields: List[str],
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
+            # Skip validation for OPTIONS requests (CORS preflight)
+            if request.method == 'OPTIONS':
+                return f(*args, **kwargs)
+            
             try:
                 if not request.is_json:
                     return jsonify({'error': 'Content-Type must be application/json'}), 400

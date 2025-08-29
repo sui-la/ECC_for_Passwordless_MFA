@@ -204,8 +204,6 @@ def session_rate_limit():
     return decorator
 
 
-
-# Advanced rate limiting with custom logic
 class AdvancedRateLimiter:
     """Advanced rate limiting with custom logic and monitoring."""
     
@@ -294,4 +292,17 @@ class AdvancedRateLimiter:
             return stats
         except Exception as e:
             self.logger.error(f"Error getting rate limit stats: {e}")
-            return {'error': str(e)} 
+            return {'error': str(e)}
+
+
+# Advanced rate limiting with custom logic
+def get_advanced_rate_limiter():
+    """
+    Get an instance of AdvancedRateLimiter with Redis client.
+    
+    Returns:
+        AdvancedRateLimiter: Configured rate limiter instance
+    """
+    from utils.redis_utils import get_redis_client
+    redis_client = get_redis_client()
+    return AdvancedRateLimiter(redis_client)

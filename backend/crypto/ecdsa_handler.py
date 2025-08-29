@@ -22,9 +22,3 @@ def verify_signature(public_key, signature: bytes, message: bytes) -> bool:
     except Exception as e:
         print(f"Signature verification failed: {e}")
         return False
-
-def der_to_rs(der_sig: bytes) -> bytes:
-    # Parse DER signature to get r and s
-    # Note: This function is not currently used and would need proper DER decoding
-    # For now, we'll leave it as a placeholder
-    raise NotImplementedError("DER to raw signature conversion not implemented")

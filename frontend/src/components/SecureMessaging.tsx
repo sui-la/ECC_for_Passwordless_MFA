@@ -18,6 +18,84 @@ interface SecureMessage {
   session_id: string;
 }
 
+// Re-authentication Modal Component
+const ReAuthModal: React.FC<{ isOpen: boolean; onClose: () => void; onReAuthenticate: () => void }> = ({ 
+  isOpen, 
+  onClose, 
+  onReAuthenticate 
+}) => {
+  if (!isOpen) return null;
+
+  return (
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      background: 'rgba(0, 0, 0, 0.7)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 1000
+    }}>
+      <div style={{
+        background: '#1a2332',
+        border: '1px solid #3a506b',
+        borderRadius: 8,
+        padding: 24,
+        maxWidth: 400,
+        width: '90%',
+        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.5)'
+      }}>
+        <div style={{ textAlign: 'center', marginBottom: 20 }}>
+          <div style={{ fontSize: '3em', marginBottom: 16 }}>⚠️</div>
+          <h3 style={{ margin: '0 0 8px 0', color: '#e0e6f0' }}>Session Expired</h3>
+          <p style={{ margin: 0, color: '#a0a6b0', fontSize: '0.9em' }}>
+            Your session has expired. Please re-authenticate to continue using secure messaging.
+          </p>
+        </div>
+        
+        <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+          <button
+            onClick={onClose}
+            style={{
+              background: '#3a506b',
+              color: '#e0e6f0',
+              border: 'none',
+              borderRadius: 6,
+              padding: '10px 20px',
+              fontSize: '0.9em',
+              cursor: 'pointer',
+              transition: 'background 0.2s'
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => {
+              onReAuthenticate();
+              onClose();
+            }}
+            style={{
+              background: '#dc3545',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 6,
+              padding: '10px 20px',
+              fontSize: '0.9em',
+              cursor: 'pointer',
+              transition: 'background 0.2s'
+            }}
+          >
+            Re-authenticate
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const SecureMessaging: React.FC<Props> = ({ showToast, onReAuthenticate, currentUserEmail }) => {
   const [recipientEmail, setRecipientEmail] = useState('');
   const [message, setMessage] = useState('');
@@ -30,11 +108,19 @@ const SecureMessaging: React.FC<Props> = ({ showToast, onReAuthenticate, current
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [hoveredMessage, setHoveredMessage] = useState<string | null>(null);
   const [reEncrypting, setReEncrypting] = useState<string | null>(null);
+  const [showReAuthModal, setShowReAuthModal] = useState(false);
 
   useEffect(() => {
     loadMessages();
     checkSessionStatus();
   }, []);
+
+  // Show re-auth modal when session expires
+  useEffect(() => {
+    if (sessionStatus === 'expired') {
+      setShowReAuthModal(true);
+    }
+  }, [sessionStatus]);
 
   const checkSessionStatus = async () => {
     try {
@@ -256,42 +342,25 @@ const SecureMessaging: React.FC<Props> = ({ showToast, onReAuthenticate, current
       </p>
 
       {/* Session Status Indicator */}
-      <div style={{ 
-        marginBottom: 16, 
-        padding: '8px 12px', 
-        borderRadius: 6, 
-        background: sessionStatus === 'valid' ? '#1e3a2e' : sessionStatus === 'expired' ? '#3a1e1e' : '#2a2a2a',
-        border: `1px solid ${sessionStatus === 'valid' ? '#28a745' : sessionStatus === 'expired' ? '#dc3545' : '#6c757d'}`,
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8
-      }}>
-        <span style={{ fontSize: '1.2em' }}>
-          {sessionStatus === 'valid' ? '🔒' : sessionStatus === 'expired' ? '⚠️' : '⏳'}
-        </span>
-        <span style={{ fontSize: '0.9em', fontWeight: 500 }}>
-          {sessionStatus === 'valid' ? 'Session Active' : 
-           sessionStatus === 'expired' ? 'Session Expired - Re-authenticate Required' : 
-           'Checking Session...'}
-        </span>
-        {sessionStatus === 'expired' && (
-          <button
-            onClick={onReAuthenticate}
-            style={{
-              background: '#dc3545',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 4,
-              padding: '4px 8px',
-              fontSize: '0.8em',
-              cursor: 'pointer',
-              marginLeft: 'auto'
-            }}
-          >
-            Re-authenticate
-          </button>
-        )}
-      </div>
+      {sessionStatus !== 'expired' && (
+        <div style={{ 
+          marginBottom: 16, 
+          padding: '8px 12px', 
+          borderRadius: 6, 
+          background: sessionStatus === 'valid' ? '#1e3a2e' : '#2a2a2a',
+          border: `1px solid ${sessionStatus === 'valid' ? '#28a745' : '#6c757d'}`,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8
+        }}>
+          <span style={{ fontSize: '1.2em' }}>
+            {sessionStatus === 'valid' ? '🔒' : '⏳'}
+          </span>
+          <span style={{ fontSize: '0.9em', fontWeight: 500 }}>
+            {sessionStatus === 'valid' ? 'Session Active' : 'Checking Session...'}
+          </span>
+        </div>
+      )}
 
       {/* Send Message Form */}
       <form onSubmit={handleSendMessage} style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
@@ -368,10 +437,10 @@ const SecureMessaging: React.FC<Props> = ({ showToast, onReAuthenticate, current
             value={message}
             onChange={e => setMessage(e.target.value)}
             disabled={sending}
-            rows={3}
+            rows={4}
             style={{
-              width: '60%',
-              maxWidth: '500px',
+              width: '80%',
+              maxWidth: 'none',
               padding: '8px 12px',
               borderRadius: 6,
               border: '1px solid #3a506b',
@@ -379,7 +448,8 @@ const SecureMessaging: React.FC<Props> = ({ showToast, onReAuthenticate, current
               color: '#e0e6f0',
               fontSize: '1em',
               resize: 'vertical',
-              fontFamily: 'inherit'
+              fontFamily: 'inherit',
+              minHeight: '120px'
             }}
             placeholder="Type your secure message..."
           />
@@ -602,6 +672,13 @@ const SecureMessaging: React.FC<Props> = ({ showToast, onReAuthenticate, current
           </div>
         </div>
       )}
+
+             {/* Re-authentication Modal */}
+       <ReAuthModal
+         isOpen={showReAuthModal}
+         onClose={() => setShowReAuthModal(false)}
+         onReAuthenticate={onReAuthenticate || (() => {})}
+       />
     </div>
   );
 };

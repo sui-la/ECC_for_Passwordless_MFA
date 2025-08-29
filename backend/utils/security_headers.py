@@ -352,6 +352,10 @@ def validate_api_security():
         
         @wraps(f)
         def decorated_function(*args, **kwargs):
+            # Skip validation for OPTIONS requests (CORS preflight)
+            if request.method == 'OPTIONS':
+                return f(*args, **kwargs)
+            
             try:
                 # Validate request headers
                 header_validation = validate_security_headers(dict(request.headers))

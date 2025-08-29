@@ -200,10 +200,6 @@ const Registration: React.FC<RegistrationProps> = ({ showToast }) => {
   return (
     <section className="section" aria-labelledby="registration-title">
       <h2 id="registration-title">Register</h2>
-      <p className="section-description">
-        Create a new account using your email address. A cryptographic key pair will be generated and stored securely on your device.
-      </p>
-      
       <form onSubmit={handleRegister} noValidate aria-describedby={error ? "registration-error" : undefined}>
         <div className="form-group">
           <label htmlFor="register-email" className="form-label">
@@ -270,9 +266,9 @@ const Registration: React.FC<RegistrationProps> = ({ showToast }) => {
             </div>
           )}
           {detectedDeviceInfo && (
-            <div id="device-info" className="info-message" style={{ 
-              fontSize: '0.85em', 
-              color: '#6b7280', 
+            <div id="device-info" className="info-message" style={{
+              fontSize: '0.85em',
+              color: '#6b7280',
               marginTop: 4,
               fontStyle: 'italic'
             }}>
@@ -303,15 +299,7 @@ const Registration: React.FC<RegistrationProps> = ({ showToast }) => {
         </button>
       </form>
 
-      <div className="info-box" role="note" aria-label="Registration information">
-        <h3>What happens during registration?</h3>
-        <ul>
-          <li>A unique cryptographic key pair is generated on your device</li>
-          <li>Your private key is stored securely in your browser's local storage</li>
-          <li>Your public key is sent to our servers for future authentication</li>
-          <li>No passwords are ever stored or transmitted</li>
-        </ul>
-      </div>
+      
     </section>
   );
 };

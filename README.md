@@ -13,6 +13,7 @@ A production-ready, enterprise-grade passwordless authentication system using El
 - **Rate Limiting**: Protection against brute-force attacks
 - **Security Headers**: Comprehensive HTTP security headers
 - **Structured Error Handling**: Secure error responses
+- **CORS Support**: Proper cross-origin resource sharing for web applications
 
 ### 📊 **Production Features**
 - **API Documentation**: Interactive Swagger/OpenAPI documentation
@@ -54,10 +55,10 @@ A production-ready, enterprise-grade passwordless authentication system using El
 - Python 3.8+ (for local development)
 
 ### 1. Clone and Setup
-   ```bash
+```bash
 git clone <repository-url>
-   cd ECCforPasswordlessMFA
-   ```
+cd ECCforPasswordlessMFA
+```
 
 ### 2. Environment Setup
 ```bash
@@ -69,7 +70,7 @@ python setup_env.py
 ```
 
 ### 3. Start the System
-   ```bash
+```bash
 # Start all services
 docker-compose up -d
 
@@ -118,12 +119,12 @@ docker-compose ps
 ## 🧪 Testing
 
 ### Quick Health Check
-   ```bash
+```bash
 curl http://localhost:5000/health
-   ```
+```
 
 ### Database Optimization Test
-   ```bash
+```bash
 # Check optimization score
 curl http://localhost:5000/api/database/optimization/score
 
@@ -132,19 +133,19 @@ curl http://localhost:5000/api/database/optimization/report
 ```
 
 ### API Documentation Test
-   ```bash
+```bash
 # Open in browser
 http://localhost:5000/api/docs
-   ```
+```
 
 ### Complete System Test
-   ```bash
+```bash
 # Run Docker-specific tests
 ./test_docker.sh
 ```
 
 ### Message Decryption Test
-   ```bash
+```bash
 # Test secure messaging functionality
 # The system now includes automatic data format validation and fixing
 ```
@@ -224,6 +225,12 @@ EMAIL_PASSWORD=your-app-password
 - Recovery: 3 per hour
 - Device management: 10 per minute
 
+### CORS Configuration
+- **Allowed Origins**: http://localhost:3000 (development)
+- **Methods**: GET, POST, PUT, DELETE, OPTIONS
+- **Headers**: Content-Type, Authorization, X-Requested-With
+- **Credentials**: Supported
+
 ## 🗄️ Database Schema
 
 ### Core Tables
@@ -283,47 +290,53 @@ CREATE TABLE auth_logs (
 ```
 ECCforPasswordlessMFA/
 ├── backend/                 # Flask backend
-│   ├── app.py              # Main application
+│   ├── app_factory.py      # Application factory
 │   ├── config.py           # Configuration
 │   ├── requirements.txt    # Python dependencies
-│   ├── auth/              # Authentication modules
-│   ├── crypto/            # Cryptographic operations
-│   ├── database/          # Database models and operations
-│   ├── utils/             # Utility modules
-│   └── tests/             # Backend tests
+│   ├── blueprints/         # Flask blueprints
+│   │   ├── auth.py         # Authentication routes
+│   │   ├── admin.py        # Admin operations
+│   │   ├── devices.py      # Device management
+│   │   ├── sessions.py     # Session management
+│   │   ├── recovery.py     # Account recovery
+│   │   └── monitoring.py   # Health monitoring
+│   ├── crypto/             # Cryptographic operations
+│   ├── database/           # Database models and operations
+│   ├── utils/              # Utility modules
+│   └── tests/              # Backend tests
 ├── frontend/               # React frontend
 │   ├── src/
-│   │   ├── components/    # React components
-│   │   ├── services/      # API services
-│   │   └── utils/         # Frontend utilities
+│   │   ├── components/     # React components
+│   │   ├── services/       # API services
+│   │   └── utils/          # Frontend utilities
 │   └── package.json
 ├── docker-compose.yml      # Docker services
 └── README.md              # This file
 ```
 
 ### Local Development
-   ```bash
+```bash
 # Backend development
 cd backend
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
-   python app.py
+python app_factory.py
 
 # Frontend development
 cd frontend
 npm install
 npm start
-   ```
+```
 
 ### Testing
-   ```bash
+```bash
 # Backend tests
 cd backend
 python -m pytest
 
 # Frontend tests
-   cd frontend
+cd frontend
 npm test
 
 # Docker tests
@@ -349,7 +362,7 @@ npm test
 ### Common Issues
 
 **Backend won't start:**
-   ```bash
+```bash
 # Check logs
 docker-compose logs backend
 
@@ -358,7 +371,7 @@ docker-compose restart backend
 ```
 
 **Database connection issues:**
-   ```bash
+```bash
 # Check database health
 curl http://localhost:5000/health
 
@@ -373,6 +386,14 @@ docker-compose logs frontend
 
 # Rebuild frontend
 docker-compose build frontend
+```
+
+**CORS issues:**
+```bash
+# Check if OPTIONS requests are working
+curl -X OPTIONS http://localhost:5000/auth/register -H "Origin: http://localhost:3000" -v
+
+# Verify CORS headers are present
 ```
 
 **Message decryption issues:**
@@ -404,19 +425,61 @@ Visit http://localhost:5000/api/docs for interactive API documentation with:
 - Authentication examples
 
 ### Key Endpoints
-- `POST /register` - User registration
+
+#### Authentication
+- `POST /auth/register` - User registration
 - `POST /auth/challenge` - Authentication challenge
 - `POST /auth/verify` - Signature verification
-- `GET /profile` - User profile
-- `GET /devices` - Device management
+
+#### Admin Operations
+- `POST /admin/email/send-verification` - Send email verification code
+- `POST /admin/email/verify-code` - Verify email code and authenticate
+- `GET /admin/profile` - User profile
+
+#### Device Management
+- `GET /devices` - List user devices
+- `POST /devices/add` - Add new device
+- `DELETE /devices/{device_id}` - Remove device
+
+#### Session Management
 - `POST /session/ecdh` - ECDH key exchange
-- `POST /session/send-secure-message` - Secure messaging
-- `POST /recovery/initiate` - Account recovery initiation
+- `POST /session/secure-data` - Secure data exchange
+- `POST /session/send-secure-message` - Send secure message
+- `GET /session/receive-secure-messages` - Receive secure messages
+- `DELETE /session/delete-secure-message/{message_id}` - Delete message
+
+#### Account Recovery
+- `POST /recovery/initiate` - Initiate account recovery
+- `POST /recovery/verify-token` - Verify recovery token
 - `POST /recovery/complete` - Complete account recovery
+
+#### Monitoring
+- `GET /health` - Basic health check
+- `GET /api/monitoring/health/comprehensive` - Comprehensive health
+- `GET /api/monitoring/system/status` - System status
+- `GET /api/monitoring/performance` - Performance metrics
 
 ## 🆕 Recent Updates
 
-### Message Decryption Fix (Latest)
+### CORS Fix (Latest)
+- **Issue**: Frontend couldn't communicate with backend due to CORS errors
+- **Solution**: Added proper OPTIONS method support for all endpoints
+- **Features**:
+  - Automatic CORS preflight handling
+  - Proper CORS headers for all endpoints
+  - Support for cross-origin requests from frontend
+
+### Email Verification Fix
+- **Issue**: Email verification endpoints were not accessible due to blueprint routing
+- **Solution**: Updated frontend to use correct `/admin/email/*` endpoints
+- **Impact**: Email verification now works correctly
+
+### Logging Function Fix
+- **Issue**: Session logging functions had incorrect parameter order
+- **Solution**: Fixed function calls to match correct signatures
+- **Impact**: Proper session event logging
+
+### Message Decryption Fix
 - **Issue**: Users encountered "Failed to decrypt message" errors
 - **Solution**: Implemented comprehensive data format validation and fixing
 - **Features**:
@@ -458,4 +521,4 @@ For support and questions:
 
 **🎉 Your ECC Passwordless MFA System is Production-Ready!**
 
-This system provides enterprise-grade security with modern cryptographic standards, comprehensive monitoring, excellent performance optimization, and robust error handling for a seamless user experience. 
+This system provides enterprise-grade security with modern cryptographic standards, comprehensive monitoring, excellent performance optimization, robust error handling, and proper CORS support for a seamless user experience.

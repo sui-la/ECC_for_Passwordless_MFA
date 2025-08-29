@@ -10,8 +10,7 @@ class User(db.Model):
     email = db.Column(db.String(255), unique=True, nullable=False)
     registration_date = db.Column(db.DateTime, default=datetime.utcnow)
     last_login = db.Column(db.DateTime)
-    email_verified = db.Column(db.Boolean, default=False)  # Track email verification status
-    # Relationship to devices
+    email_verified = db.Column(db.Boolean, default=False)
     devices = db.relationship('Device', backref='user', lazy=True, cascade='all, delete-orphan')
 
 class Device(db.Model):

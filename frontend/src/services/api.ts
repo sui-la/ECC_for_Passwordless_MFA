@@ -1,7 +1,7 @@
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
 export async function register(email: string, publicKeyPem: string, deviceName?: string): Promise<{ message: string; device_id?: string }> {
-  const res = await fetch(`${API_URL}/register`, {
+  const res = await fetch(`${API_URL}/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ 
@@ -54,7 +54,7 @@ export async function getProfile(): Promise<{ email: string; last_login: string 
   const token = localStorage.getItem('jwt');
   if (!token) throw new Error('No authentication token found');
   
-  const res = await fetch(`${API_URL}/profile`, {
+  const res = await fetch(`${API_URL}/admin/profile`, {
     method: 'GET',
     headers: { 
       'Content-Type': 'application/json',
@@ -76,22 +76,8 @@ export async function sendECDHPublicKey(clientECDHPublicKeyPem: string): Promise
     },
     body: JSON.stringify({ client_ecdh_public_key: clientECDHPublicKeyPem })
   });
-  if (!res.ok) throw new Error((await res.json()).error || 'ECDH key exchange failed');
-  return res.json();
-} 
-
-export async function sendSecureData(ciphertext: string, iv: string): Promise<{ ciphertext: string, iv: string }> {
-  const token = localStorage.getItem('jwt');
-  if (!token) throw new Error('No authentication token found');
-  const res = await fetch(`${API_URL}/session/secure-data`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
-    },
-    body: JSON.stringify({ ciphertext, iv })
-  });
-  if (!res.ok) throw new Error((await res.json()).error || 'Secure data exchange failed');
+  if (!res.ok) throw new Error((await res.json()).error || 
+  'ECDH key exchange failed');
   return res.json();
 }
 
@@ -207,7 +193,7 @@ export async function addDevice(publicKeyPem: string, deviceName: string): Promi
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`
     },
-    body: JSON.stringify({ 
+    body: JSON.stringify({
       public_key_pem: publicKeyPem,
       device_name: deviceName
     })
@@ -216,11 +202,11 @@ export async function addDevice(publicKeyPem: string, deviceName: string): Promi
   return res.json();
 }
 
-export async function removeDevice(deviceId: string): Promise<{ message: string }> {
+export async function removeDevice(device_id: string): Promise<{ message: string }> {
   const token = localStorage.getItem('jwt');
   if (!token) throw new Error('No authentication token found');
   
-  const res = await fetch(`${API_URL}/devices/${deviceId}`, {
+  const res = await fetch(`${API_URL}/devices/${device_id}`, {
     method: 'DELETE',
     headers: { 
       'Content-Type': 'application/json',
@@ -231,7 +217,7 @@ export async function removeDevice(deviceId: string): Promise<{ message: string 
   return res.json();
 } 
 
-export async function getDevicePublicKey(deviceId: string): Promise<{
+export async function getDevicePublicKey(device_id: string): Promise<{
   device_id: string;
   device_name: string;
   public_key_pem: string;
@@ -239,7 +225,7 @@ export async function getDevicePublicKey(deviceId: string): Promise<{
   const token = localStorage.getItem('jwt');
   if (!token) throw new Error('No authentication token found');
   
-  const res = await fetch(`${API_URL}/devices/${deviceId}/public-key`, {
+  const res = await fetch(`${API_URL}/devices/${device_id}/public-key`, {
     method: 'GET',
     headers: { 
       'Content-Type': 'application/json',
@@ -293,7 +279,7 @@ export async function completeRecovery(
 }
 
 export async function sendEmailVerification(email: string): Promise<{ message: string }> {
-  const res = await fetch(`${API_URL}/email/send-verification`, {
+  const res = await fetch(`${API_URL}/admin/email/send-verification`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email })
@@ -302,8 +288,13 @@ export async function sendEmailVerification(email: string): Promise<{ message: s
   return res.json();
 }
 
-export async function verifyEmailCode(email: string, verificationCode: string): Promise<{ message: string }> {
-  const res = await fetch(`${API_URL}/email/verify-code`, {
+export async function verifyEmailCode(email: string, verificationCode: string): Promise<{ 
+  message: string; 
+  token?: string; 
+  server_ecdh_public_key?: string; 
+  session_id?: string; 
+}> {
+  const res = await fetch(`${API_URL}/admin/email/verify-code`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ 
