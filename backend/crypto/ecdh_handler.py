@@ -43,7 +43,7 @@ def derive_session_keys(shared_secret: bytes, salt: Optional[bytes] = None) -> T
     # Use HKDF to derive multiple keys
     hkdf = HKDF(
         algorithm=hashes.SHA256(),
-        length=96,  # 32 bytes each for encryption, MAC, and IV
+        length=96,
         salt=salt,
         info=b'ecc-mfa-session-keys',
         backend=default_backend()

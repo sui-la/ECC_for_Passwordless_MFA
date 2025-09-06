@@ -11,17 +11,17 @@ logger = logging.getLogger(__name__)
 class RateLimitConfig:
     """Configuration for rate limiting strategies."""
     
-    # Authentication endpoints - strict limits
+    # Authentication endpoints
     AUTH_CHALLENGE_LIMIT = "5 per minute"
     AUTH_VERIFY_LIMIT = "10 per minute"
     REGISTRATION_LIMIT = "3 per hour"
     
-    # Recovery endpoints - very strict limits
+    # Recovery endpoints
     RECOVERY_INITIATE_LIMIT = "2 per hour"
     RECOVERY_VERIFY_LIMIT = "5 per hour"
     RECOVERY_COMPLETE_LIMIT = "3 per hour"
     
-    # Device management - moderate limits
+    # Device management
     DEVICE_ADD_LIMIT = "5 per hour"
     DEVICE_REMOVE_LIMIT = "10 per hour"
     DEVICE_LIST_LIMIT = "30 per minute"
